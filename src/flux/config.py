@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     enable_redis: bool = False
     load_model: bool = True
     max_new_tokens_cap: int = 64
-    serve_engine: str = "cached"
+    # naive | cached | queued | continuous. Product default is the Phase 5 loop.
+    serve_engine: str = "continuous"
 
 
 @lru_cache
