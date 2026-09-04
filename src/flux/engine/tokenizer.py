@@ -43,6 +43,17 @@ def decode_tokens(tokenizer: Any, token_ids: Sequence[int], skip_special_tokens:
     return tokenizer.decode(list(token_ids), skip_special_tokens=skip_special_tokens)
 
 
+def decode_delta(tokenizer: Any, all_ids: Sequence[int], prev_text: str) -> tuple[str, str]:
+    """Decode the growing id list and return (full_text, new_suffix)."""
+    text = decode_tokens(tokenizer, all_ids, skip_special_tokens=True)
+    if text.startswith(prev_text):
+        return text, text[len(prev_text) :]
+    if not all_ids:
+        return prev_text, ""
+    piece = decode_tokens(tokenizer, all_ids[-1:], skip_special_tokens=True)
+    return prev_text + piece, piece
+
+
 def stop_token_ids(tokenizer: Any) -> tuple[int, ...]:
     """EOS plus Qwen `<|im_end|>` when present. Deduped, stable order."""
     found: list[int] = []

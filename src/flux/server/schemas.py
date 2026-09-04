@@ -21,13 +21,6 @@ class CompletionRequest(BaseModel):
             raise ValueError("prompt must be a non-empty string")
         return value
 
-    @field_validator("stream")
-    @classmethod
-    def no_stream_yet(cls, value: bool) -> bool:
-        if value:
-            raise ValueError("streaming is not available yet (Phase 7)")
-        return value
-
 
 class CompletionChoice(BaseModel):
     text: str
@@ -84,13 +77,6 @@ class ChatCompletionRequest(BaseModel):
     def messages_non_empty(cls, value: list[ChatMessage]) -> list[ChatMessage]:
         if not value:
             raise ValueError("messages must be non-empty")
-        return value
-
-    @field_validator("stream")
-    @classmethod
-    def no_stream_yet(cls, value: bool) -> bool:
-        if value:
-            raise ValueError("streaming is not available yet (Phase 7)")
         return value
 
 

@@ -1,4 +1,4 @@
-from flux.engine.tokenizer import encode_chat, encode_text, stop_token_ids
+from flux.engine.tokenizer import decode_delta, encode_chat, encode_text, stop_token_ids
 from flux.engine.fake_lm import FakeTokenizer
 
 
@@ -38,3 +38,14 @@ def test_chat_template_includes_roles_and_generation_prompt() -> None:
 def test_stop_token_ids_include_eos() -> None:
     tokenizer = FakeTokenizer()
     assert tokenizer.eos_token_id in stop_token_ids(tokenizer)
+
+
+def test_decode_delta_grows_suffix() -> None:
+    tokenizer = FakeTokenizer()
+    ids = tokenizer.encode("hello")
+    full = ""
+    pieces = []
+    for i in range(1, len(ids) + 1):
+        full, delta = decode_delta(tokenizer, ids[:i], full)
+        pieces.append(delta)
+    assert "".join(pieces) == tokenizer.decode(ids)

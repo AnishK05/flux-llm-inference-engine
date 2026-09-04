@@ -21,7 +21,7 @@ class SequenceStatus(str, Enum):
     ERROR = "error"
 
 
-@dataclass
+@dataclass(eq=False)
 class Sequence:
     prompt_ids: torch.Tensor
     sampling: SamplingParams
@@ -39,6 +39,16 @@ class Sequence:
     finished_at: float | None = None
     token_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     finished_event: asyncio.Event = field(default_factory=asyncio.Event)
+    block_ids: list[int] = field(default_factory=list)
+    abort_requested: bool = False
+    _loop: Any = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if self._loop is None:
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._loop = None
 
     @property
     def prompt_token_ids(self) -> list[int]:
@@ -46,6 +56,12 @@ class Sequence:
         if ids.dim() == 2:
             ids = ids[0]
         return [int(x) for x in ids.tolist()]
+
+    def reservation_tokens(self) -> int:
+        return len(self.prompt_token_ids) + self.sampling.max_tokens
+
+    def request_abort(self) -> None:
+        self.abort_requested = True
 
     def is_done(self) -> bool:
         if self.finish_reason is not None:

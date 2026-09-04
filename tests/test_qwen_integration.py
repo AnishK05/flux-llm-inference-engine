@@ -170,3 +170,51 @@ def test_qwen_short_finishes_before_long(qwen_pair) -> None:
     assert short.finished_at < long.finished_at
     assert len(short.output_ids) <= 2
     assert len(long.output_ids) <= 10
+
+
+def test_qwen_first_token_streams_before_finish(qwen_pair) -> None:
+    _, cached, _, tokenizer = qwen_pair
+
+    async def main() -> None:
+        worker = ContinuousWorker(cached, Scheduler(RequestQueue(8), max_batch=8))
+        seq = Sequence(
+            prompt_ids=encode_text(tokenizer, "Hi"),
+            sampling=SamplingParams(max_tokens=4, temperature=0.0),
+        )
+        task = asyncio.create_task(worker.run())
+        try:
+            worker.scheduler.submit(seq)
+            token = await asyncio.wait_for(seq.token_queue.get(), timeout=15)
+            assert token is not None
+            assert not seq.finished_event.is_set()
+            await seq.finished_event.wait()
+            assert seq.result is not None
+        finally:
+            worker.request_stop()
+            await asyncio.wait_for(task, timeout=30)
+
+    asyncio.run(main())
+
+
+def test_qwen_block_pool_freed(qwen_pair) -> None:
+    from flux.engine.block_pool import BlockPool
+
+    _, cached, _, tokenizer = qwen_pair
+    pool = BlockPool(8, 16)
+
+    async def main() -> None:
+        worker = ContinuousWorker(cached, Scheduler(RequestQueue(8), max_batch=8, pool=pool))
+        seq = Sequence(
+            prompt_ids=encode_text(tokenizer, "The capital of France is"),
+            sampling=SamplingParams(max_tokens=4, temperature=0.0),
+        )
+        task = asyncio.create_task(worker.run())
+        try:
+            worker.scheduler.submit(seq)
+            await seq.finished_event.wait()
+        finally:
+            worker.request_stop()
+            await asyncio.wait_for(task, timeout=30)
+
+    asyncio.run(main())
+    assert pool.used_blocks == 0

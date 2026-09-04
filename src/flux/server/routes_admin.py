@@ -41,7 +41,16 @@ def admin_stats(request: Request) -> dict:
     running = len(worker.stats.running) if worker is not None else 0
     last_batch = worker.stats.last_batch_size if worker is not None else 0
     tokens = worker.stats.tokens_generated if worker is not None else 0
-    return {
+    pool = getattr(request.app.state, "block_pool", None)
+    if pool is None and scheduler is not None:
+        pool = getattr(scheduler, "pool", None)
+    kv = pool.snapshot() if pool is not None else {
+        "kv_blocks_used": 0,
+        "kv_blocks_free": 0,
+        "kv_blocks_total": 0,
+        "kv_block_size": settings.block_size,
+    }
+    payload = {
         "waiting": waiting,
         "running": running,
         "in_flight": waiting + running,
@@ -50,4 +59,7 @@ def admin_stats(request: Request) -> dict:
         "last_batch_size": last_batch,
         "tokens_generated": tokens,
         "serve_engine": normalize_serve_engine(settings.serve_engine),
+        "scheduler": getattr(scheduler, "policy", settings.scheduler) if scheduler else settings.scheduler,
     }
+    payload.update(kv)
+    return payload
