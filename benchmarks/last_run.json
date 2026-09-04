@@ -1,0 +1,344 @@
+{
+  "hardware": {
+    "os": "linux",
+    "cpu_model": "Intel(R) Xeon(R) Processor",
+    "cpu_count": 4,
+    "ram_bytes": 16791945216,
+    "ram_gib": 15.64,
+    "intra_threads": 4,
+    "device": "cpu",
+    "dtype": "fp32",
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "note": "Official resume numbers should be re-run on the Windows + WSL2 laptop. This host is the machine that executed the bench."
+  },
+  "hardware_line": "linux, Intel(R) Xeon(R) Processor, 4 cores, 15.64 GiB RAM, FLUX_INTRA_THREADS=4, Qwen/Qwen2.5-0.5B-Instruct, fp32 on cpu",
+  "backend": "qwen",
+  "warmup": 10,
+  "requests": 16,
+  "trials": 3,
+  "runs": [
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "naive",
+      "concurrency": 4,
+      "warmup": 10,
+      "aggregates": {
+        "tok_s": 2.064556766849522,
+        "req_s": 0.06451739896404757,
+        "ttft_p50_ms": 138.16266666666667,
+        "ttft_p95_ms": 149.853,
+        "ttft_p99_ms": 149.853,
+        "e2e_p50_ms": 22976.21628699987,
+        "e2e_p95_ms": 24157.64044266628,
+        "e2e_p99_ms": 24157.64044266628,
+        "n_trials": 3,
+        "statuses": {
+          "200": 16
+        }
+      },
+      "trial": "mean"
+    },
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "continuous",
+      "concurrency": 4,
+      "warmup": 10,
+      "aggregates": {
+        "tok_s": 15.064401070005395,
+        "req_s": 0.4707625334376686,
+        "ttft_p50_ms": 141.053,
+        "ttft_p95_ms": 150.22066666666666,
+        "ttft_p99_ms": 150.22066666666666,
+        "e2e_p50_ms": 3185.510871332857,
+        "e2e_p95_ms": 3531.72266966673,
+        "e2e_p99_ms": 3531.72266966673,
+        "n_trials": 3,
+        "statuses": {
+          "200": 16
+        }
+      },
+      "trial": "mean"
+    },
+    {
+      "scenario": "soak_200",
+      "engine": "continuous",
+      "concurrency": 200,
+      "warmup": 0,
+      "aggregates": {
+        "tok_s": 3130.7106883253145,
+        "req_s": 391.3388360406643,
+        "ttft_p50_ms": 0.10333333333333333,
+        "ttft_p95_ms": 0.22,
+        "ttft_p99_ms": 0.23966666666666667,
+        "e2e_p50_ms": 256.0024840004189,
+        "e2e_p95_ms": 409.7700586674667,
+        "e2e_p99_ms": 422.9242156670807,
+        "n_trials": 3,
+        "statuses": {
+          "200": 200
+        }
+      },
+      "trial": "mean"
+    }
+  ],
+  "raw_trials": [
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "naive",
+      "concurrency": 4,
+      "warmup": 10,
+      "wall_s": 100.13363269399997,
+      "statuses": {
+        "200": 16
+      },
+      "aggregates": {
+        "n_measured": 6,
+        "n_ok": 6,
+        "output_tokens": 192,
+        "tok_s": 1.9174376763772867,
+        "req_s": 0.05991992738679021,
+        "ttft_p50_ms": 138.279,
+        "ttft_p95_ms": 166.589,
+        "ttft_p99_ms": 166.589,
+        "e2e_p50_ms": 24147.888739000336,
+        "e2e_p95_ms": 27478.74518000026,
+        "e2e_p99_ms": 27478.74518000026,
+        "statuses": {
+          "200": 16
+        },
+        "wall_s": 100.13363269399997
+      },
+      "trial": 0
+    },
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "naive",
+      "concurrency": 4,
+      "warmup": 10,
+      "wall_s": 89.79623911099952,
+      "statuses": {
+        "200": 16
+      },
+      "aggregates": {
+        "n_measured": 6,
+        "n_ok": 6,
+        "output_tokens": 192,
+        "tok_s": 2.138174180799083,
+        "req_s": 0.06681794314997135,
+        "ttft_p50_ms": 137.919,
+        "ttft_p95_ms": 139.224,
+        "ttft_p99_ms": 139.224,
+        "e2e_p50_ms": 22365.785805000996,
+        "e2e_p95_ms": 22540.149988999474,
+        "e2e_p99_ms": 22540.149988999474,
+        "statuses": {
+          "200": 16
+        },
+        "wall_s": 89.79623911099952
+      },
+      "trial": 1
+    },
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "naive",
+      "concurrency": 4,
+      "warmup": 10,
+      "wall_s": 89.8010999629987,
+      "statuses": {
+        "200": 16
+      },
+      "aggregates": {
+        "n_measured": 6,
+        "n_ok": 6,
+        "output_tokens": 192,
+        "tok_s": 2.1380584433721963,
+        "req_s": 0.06681432635538113,
+        "ttft_p50_ms": 138.29,
+        "ttft_p95_ms": 143.746,
+        "ttft_p99_ms": 143.746,
+        "e2e_p50_ms": 22414.97431699827,
+        "e2e_p95_ms": 22454.026158999113,
+        "e2e_p99_ms": 22454.026158999113,
+        "statuses": {
+          "200": 16
+        },
+        "wall_s": 89.8010999629987
+      },
+      "trial": 2
+    },
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "continuous",
+      "concurrency": 4,
+      "warmup": 10,
+      "wall_s": 12.710864012000457,
+      "statuses": {
+        "200": 16
+      },
+      "aggregates": {
+        "n_measured": 6,
+        "n_ok": 6,
+        "output_tokens": 192,
+        "tok_s": 15.105188743954058,
+        "req_s": 0.4720371482485643,
+        "ttft_p50_ms": 140.749,
+        "ttft_p95_ms": 146.297,
+        "ttft_p99_ms": 146.297,
+        "e2e_p50_ms": 3176.198929999373,
+        "e2e_p95_ms": 3700.881388000198,
+        "e2e_p99_ms": 3700.881388000198,
+        "statuses": {
+          "200": 16
+        },
+        "wall_s": 12.710864012000457
+      },
+      "trial": 0
+    },
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "continuous",
+      "concurrency": 4,
+      "warmup": 10,
+      "wall_s": 12.854134092000095,
+      "statuses": {
+        "200": 16
+      },
+      "aggregates": {
+        "n_measured": 6,
+        "n_ok": 6,
+        "output_tokens": 192,
+        "tok_s": 14.936828776315101,
+        "req_s": 0.4667758992598469,
+        "ttft_p50_ms": 141.116,
+        "ttft_p95_ms": 158.037,
+        "ttft_p99_ms": 158.037,
+        "e2e_p50_ms": 3193.121195999993,
+        "e2e_p95_ms": 3705.008123999505,
+        "e2e_p99_ms": 3705.008123999505,
+        "statuses": {
+          "200": 16
+        },
+        "wall_s": 12.854134092000095
+      },
+      "trial": 1
+    },
+    {
+      "scenario": "naive_vs_flux",
+      "engine": "continuous",
+      "concurrency": 4,
+      "warmup": 10,
+      "wall_s": 12.672275552000428,
+      "statuses": {
+        "200": 16
+      },
+      "aggregates": {
+        "n_measured": 6,
+        "n_ok": 6,
+        "output_tokens": 192,
+        "tok_s": 15.151185689747027,
+        "req_s": 0.4734745528045946,
+        "ttft_p50_ms": 141.294,
+        "ttft_p95_ms": 146.328,
+        "ttft_p99_ms": 146.328,
+        "e2e_p50_ms": 3187.2124879992043,
+        "e2e_p95_ms": 3189.278497000487,
+        "e2e_p99_ms": 3189.278497000487,
+        "statuses": {
+          "200": 16
+        },
+        "wall_s": 12.672275552000428
+      },
+      "trial": 2
+    },
+    {
+      "scenario": "soak_200",
+      "engine": "continuous",
+      "concurrency": 200,
+      "warmup": 0,
+      "wall_s": 0.49477425500117533,
+      "statuses": {
+        "200": 200
+      },
+      "aggregates": {
+        "n_measured": 200,
+        "n_ok": 200,
+        "output_tokens": 1600,
+        "tok_s": 3233.7980075301193,
+        "req_s": 404.2247509412649,
+        "ttft_p50_ms": 0.099,
+        "ttft_p95_ms": 0.222,
+        "ttft_p99_ms": 0.246,
+        "e2e_p50_ms": 261.0356130007858,
+        "e2e_p95_ms": 412.623178001013,
+        "e2e_p99_ms": 426.0151369999221,
+        "statuses": {
+          "200": 200
+        },
+        "wall_s": 0.49477425500117533
+      },
+      "trial": 0
+    },
+    {
+      "scenario": "soak_200",
+      "engine": "continuous",
+      "concurrency": 200,
+      "warmup": 0,
+      "wall_s": 0.4846235550012352,
+      "statuses": {
+        "200": 200
+      },
+      "aggregates": {
+        "n_measured": 200,
+        "n_ok": 200,
+        "output_tokens": 1600,
+        "tok_s": 3301.5316393276053,
+        "req_s": 412.69145491595066,
+        "ttft_p50_ms": 0.103,
+        "ttft_p95_ms": 0.218,
+        "ttft_p99_ms": 0.241,
+        "e2e_p50_ms": 253.11407300068822,
+        "e2e_p95_ms": 407.22478600036993,
+        "e2e_p99_ms": 420.2758540013747,
+        "statuses": {
+          "200": 200
+        },
+        "wall_s": 0.4846235550012352
+      },
+      "trial": 1
+    },
+    {
+      "scenario": "soak_200",
+      "engine": "continuous",
+      "concurrency": 200,
+      "warmup": 0,
+      "wall_s": 0.5600667340004293,
+      "statuses": {
+        "200": 200
+      },
+      "aggregates": {
+        "n_measured": 200,
+        "n_ok": 200,
+        "output_tokens": 1600,
+        "tok_s": 2856.8024181182195,
+        "req_s": 357.10030226477744,
+        "ttft_p50_ms": 0.108,
+        "ttft_p95_ms": 0.22,
+        "ttft_p99_ms": 0.232,
+        "e2e_p50_ms": 253.8577659997827,
+        "e2e_p95_ms": 409.4622120010172,
+        "e2e_p99_ms": 422.48165599994536,
+        "statuses": {
+          "200": 200
+        },
+        "wall_s": 0.5600667340004293
+      },
+      "trial": 2
+    }
+  ],
+  "note": "Official resume numbers should be re-run on the Windows + WSL2 laptop. This host is the machine that executed the bench.",
+  "story": {
+    "text": "p99 TTFT naive 149.9 ms vs Flux 150.2 ms (0.2% higher on Flux). Aggregate tok/s Flux 15.06 vs naive 2.06 (7.30x).",
+    "p99_ttft_cut_pct": -0.2453515556356233,
+    "throughput_x": 7.296675640938375
+  }
+}
