@@ -40,8 +40,11 @@ bench-kv: $(VENV)/bin/python
 bench-batch: $(VENV)/bin/python
 	$(PY) benchmarks/queued_vs_continuous.py --qwen --concurrency 4,8 --max-tokens 8 --out docs/phase5_queued_vs_continuous.json
 
+# Prefer Compose V2 (`docker compose`); fall back to the v1 binary.
+COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
+
 compose-up:
-	docker compose up -d redis prometheus grafana
+	$(COMPOSE) up -d redis prometheus grafana
 
 compose-down:
-	docker compose down
+	$(COMPOSE) down

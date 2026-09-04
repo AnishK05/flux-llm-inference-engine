@@ -88,10 +88,12 @@ def write_report(payload: dict[str, Any], out_dir: Path) -> Path:
         label = f"{run.get('engine')}/{run.get('scenario')}@{run.get('concurrency')}"
         ttft = agg.get("ttft_p99_ms")
         toks = agg.get("tok_s")
-        if ttft is not None:
-            plot_ttft.append((label, float(ttft)))
-        if toks is not None:
-            plot_toks.append((label, float(toks)))
+        # soak_200 is a control-plane check (FakeLM). Do not put it on the resume plots.
+        if run.get("scenario") != "soak_200":
+            if ttft is not None:
+                plot_ttft.append((label, float(ttft)))
+            if toks is not None:
+                plot_toks.append((label, float(toks)))
         md.append(
             "| {scenario} | {engine} | {conc} | {tok:.3f} | {req:.3f} | {p50} | {p99} | {e50} | {e99} | {st} |".format(
                 scenario=run.get("scenario"),
@@ -103,7 +105,7 @@ def write_report(payload: dict[str, Any], out_dir: Path) -> Path:
                 p99=_fmt(agg.get("ttft_p99_ms")),
                 e50=_fmt(agg.get("e2e_p50_ms")),
                 e99=_fmt(agg.get("e2e_p99_ms")),
-                st=agg.get("statuses"),
+                st=_fmt_statuses(agg.get("statuses")),
             )
         )
 
@@ -132,6 +134,14 @@ def _fmt(value: Any) -> str:
     if value is None:
         return "—"
     return f"{float(value):.1f}"
+
+
+def _fmt_statuses(value: Any) -> str:
+    if not value:
+        return "—"
+    if isinstance(value, dict):
+        return ", ".join(f"{k}:{v}" for k, v in value.items())
+    return str(value)
 
 
 def main() -> None:
