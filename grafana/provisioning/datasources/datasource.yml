@@ -5,6 +5,8 @@ datasources:
     type: prometheus
     access: proxy
     uid: prometheus
-    url: http://prometheus:9090
+    # Published host port, same pattern as scraping the API. Compose DNS
+    # (http://prometheus:9090) can fail when inter-container routing is blocked.
+    url: http://host.docker.internal:9090
     isDefault: true
     editable: false

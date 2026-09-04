@@ -59,7 +59,9 @@ make compose-up     # redis + prometheus + grafana
 make api            # host :8000 ; Prometheus scrapes host.docker.internal:8000/metrics every 5s
 ```
 
-Grafana: http://127.0.0.1:3001 — dashboard **Flux serving** (in-flight, p99 TTFT, tok/s, KV pool, batch size, RSS, prefill vs decode). Password `flux`, anonymous Viewer is on.
+Grafana: http://127.0.0.1:3001 — dashboard **Flux serving** (in-flight, TTFT histogram + p99, tok/s, KV pool, batch size, RSS, prefill vs decode). Password `flux`, anonymous Viewer is on.
+
+![Grafana Flux serving](docs/grafana-serving.webp)
 
 Serving modes: `continuous` (default), `queued`, `cached`, `naive`. Do not set `uvicorn --workers` above 1.
 
