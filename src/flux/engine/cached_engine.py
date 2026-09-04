@@ -12,6 +12,7 @@ from typing import Any, Sequence
 
 import torch
 
+from flux.engine.batching import attention_mask_for_decode, extract_row_cache, stack_caches, wrap_past
 from flux.engine.kv_utils import cache_seq_len
 from flux.engine.naive_engine import pack_result
 from flux.engine.sampler import sample_logits
@@ -56,6 +57,39 @@ class CachedEngine:
             )
         logits = outputs.logits[:, -1, :]
         return logits, outputs.past_key_values
+
+    def decode_batch(
+        self, last_tokens: torch.Tensor, caches: list[Any]
+    ) -> tuple[torch.Tensor, list[Any]]:
+        """Decode one token for B sequences with right-padded stacked KV caches."""
+        if not caches:
+            raise ValueError("decode_batch requires caches")
+        token_ids = last_tokens.view(-1, 1).to(self.device)
+        stacked, lengths, max_past = stack_caches(caches)
+        past = wrap_past(stacked, huggingface=self._huggingface)
+        attn = attention_mask_for_decode(lengths, max_past, device=token_ids.device)
+        position_ids = torch.tensor(lengths, dtype=torch.long, device=self.device).view(-1, 1)
+        cache_position = torch.tensor([max_past], dtype=torch.long, device=self.device)
+        with torch.inference_mode():
+            outputs = self.model(
+                token_ids,
+                use_cache=True,
+                past_key_values=past,
+                attention_mask=attn,
+                position_ids=position_ids,
+                cache_position=cache_position,
+            )
+        logits = outputs.logits[:, -1, :]
+        # Keep per-row caches as legacy (K, V) lists so the next stack is uniform.
+        new_caches = [
+            extract_row_cache(outputs.past_key_values, row, old_len)
+            for row, old_len in enumerate(lengths)
+        ]
+        return logits, new_caches
+
+    @property
+    def _huggingface(self) -> bool:
+        return hasattr(self.model, "config")
 
     def generate(self, prompt: str, sampling: SamplingParams | None = None) -> GenerateResult:
         sampling = sampling or SamplingParams()

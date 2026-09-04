@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from flux.config import Settings, get_settings
 from flux.engine.cached_engine import CachedEngine
 from flux.engine.naive_engine import NaiveEngine
+from flux.engine.serving import attach_worker, normalize_serve_engine
 from flux.runtime import apply_thread_caps
 from flux.server.routes_admin import router as admin_router
 from flux.server.routes_openai import router as openai_router
@@ -22,13 +23,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 def build_engine(model: Any, tokenizer: Any, settings: Settings) -> Any:
     device = settings.device
-    name = (settings.serve_engine or "cached").strip().lower()
+    name = normalize_serve_engine(settings.serve_engine)
     if name == "naive":
         logger.info("using NaiveEngine (full-sequence recompute)")
         return NaiveEngine(model, tokenizer, device=device)
-    if name != "cached":
-        logger.warning("unknown FLUX_SERVE_ENGINE=%r, falling back to cached", settings.serve_engine)
-    logger.info("using CachedEngine (KV-cached decode)")
+    logger.info("using CachedEngine (KV-cached decode) serve_engine=%s", name)
     return CachedEngine(model, tokenizer, device=device)
 
 
@@ -45,17 +44,35 @@ def create_app(settings: Settings | None = None, engine: Any = None) -> FastAPI:
             model, tokenizer = await asyncio.to_thread(load_causal_lm, settings)
             app.state.engine = build_engine(model, tokenizer, settings)
             logger.info("startup: model ready engine=%s", getattr(app.state.engine, "engine_name", "?"))
+        worker = attach_worker(app, settings, app.state.engine)
+        task: asyncio.Task | None = None
+        if worker is not None:
+            task = asyncio.create_task(worker.run(), name=f"flux-{worker.engine_name}")
         yield
+        if worker is not None:
+            worker.request_stop()
+        if task is not None:
+            try:
+                await asyncio.wait_for(task, timeout=10)
+            except asyncio.TimeoutError:
+                logger.warning("worker did not stop in time; cancelling")
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
     app = FastAPI(
         title="Flux",
         version="0.1.0",
-        description="CPU LLM inference server — Phase 2 KV cache + Phase 3 chat/sampling",
+        description="CPU LLM inference server — Phase 4 queue + Phase 5 continuous batching",
         lifespan=lifespan,
     )
     app.state.settings = settings
     app.state.engine = engine
     app.state.generate_lock = asyncio.Lock()
+    app.state.scheduler = None
+    app.state.worker = None
     app.include_router(admin_router)
     app.include_router(openai_router)
 

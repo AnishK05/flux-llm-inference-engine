@@ -1,14 +1,19 @@
+import asyncio
 import os
 
 import pytest
+import torch
 
 from flux.config import HF_MODEL_ID, Settings
 from flux.engine.cached_engine import CachedEngine
-from flux.engine.kv_utils import describe_cache
+from flux.engine.kv_utils import cache_seq_len, describe_cache
 from flux.engine.model_loader import load_causal_lm
 from flux.engine.naive_engine import NaiveEngine
-from flux.engine.tokenizer import encode_chat, stop_token_ids
+from flux.engine.scheduler import RequestQueue, Scheduler
+from flux.engine.sequence import Sequence
+from flux.engine.tokenizer import encode_chat, encode_text, stop_token_ids
 from flux.engine.types import SamplingParams
+from flux.engine.worker import ContinuousWorker
 from flux.runtime import apply_thread_caps
 
 pytestmark = [
@@ -77,3 +82,91 @@ def test_qwen_chat_template_applied(qwen_pair) -> None:
     result = cached.generate_chat(messages, SamplingParams(max_tokens=8, temperature=0.0))
     assert result.prompt_tokens == ids.shape[1]
     assert result.completion_tokens >= 1
+
+
+def test_qwen_decode_batch_mixed_lengths_match_solo(qwen_pair) -> None:
+    _, cached, _, tokenizer = qwen_pair
+    prompts = ["Hi", "The capital of France is"]
+    ids = [tokenizer(text, return_tensors="pt")["input_ids"] for text in prompts]
+    expected_tokens: list[int] = []
+    expected_lens: list[int] = []
+    for prompt_ids in ids:
+        logits, cache = cached.prefill(prompt_ids)
+        token = logits.argmax(dim=-1)
+        next_logits, new_cache = cached.decode(token, cache)
+        expected_tokens.append(int(next_logits.argmax(dim=-1).item()))
+        expected_lens.append(cache_seq_len(new_cache))
+
+    last_tokens = []
+    caches = []
+    for prompt_ids in ids:
+        logits, cache = cached.prefill(prompt_ids)
+        token = logits.argmax(dim=-1)
+        last_tokens.append(int(token.item()))
+        caches.append(cache)
+
+    batched_logits, batched_caches = cached.decode_batch(
+        torch.tensor(last_tokens, dtype=torch.long), caches
+    )
+    for row, (exp_token, exp_len) in enumerate(zip(expected_tokens, expected_lens)):
+        assert int(batched_logits[row].argmax().item()) == exp_token
+        assert cache_seq_len(batched_caches[row]) == exp_len
+
+
+def test_qwen_continuous_greedy_matches_solo(qwen_pair) -> None:
+    _, cached, _, tokenizer = qwen_pair
+    params = SamplingParams(max_tokens=6, temperature=0.0)
+    prompts = ["Hi", "The capital of France is"]
+    solos = [cached.generate(text, params) for text in prompts]
+
+    async def main() -> list[Sequence]:
+        worker = ContinuousWorker(cached, Scheduler(RequestQueue(16), max_batch=8))
+        seqs = [
+            Sequence(prompt_ids=encode_text(tokenizer, text), sampling=params) for text in prompts
+        ]
+        task = asyncio.create_task(worker.run())
+        try:
+            for seq in seqs:
+                worker.scheduler.submit(seq)
+            await asyncio.gather(*[seq.finished_event.wait() for seq in seqs])
+        finally:
+            worker.request_stop()
+            await asyncio.wait_for(task, timeout=30)
+        return seqs
+
+    seqs = asyncio.run(main())
+    for seq, solo in zip(seqs, solos):
+        assert seq.result is not None
+        assert seq.result.output_token_ids == solo.output_token_ids
+        assert seq.result.finish_reason == solo.finish_reason
+
+
+def test_qwen_short_finishes_before_long(qwen_pair) -> None:
+    _, cached, _, tokenizer = qwen_pair
+
+    async def main() -> tuple[Sequence, Sequence]:
+        worker = ContinuousWorker(cached, Scheduler(RequestQueue(16), max_batch=8))
+        short = Sequence(
+            prompt_ids=encode_text(tokenizer, "Hi"),
+            sampling=SamplingParams(max_tokens=2, temperature=0.0),
+        )
+        long = Sequence(
+            prompt_ids=encode_text(tokenizer, "The capital of France is"),
+            sampling=SamplingParams(max_tokens=10, temperature=0.0),
+        )
+        task = asyncio.create_task(worker.run())
+        try:
+            worker.scheduler.submit(short)
+            worker.scheduler.submit(long)
+            await asyncio.gather(short.finished_event.wait(), long.finished_event.wait())
+        finally:
+            worker.request_stop()
+            await asyncio.wait_for(task, timeout=60)
+        return short, long
+
+    short, long = asyncio.run(main())
+    assert short.finished_at is not None
+    assert long.finished_at is not None
+    assert short.finished_at < long.finished_at
+    assert len(short.output_ids) <= 2
+    assert len(long.output_ids) <= 10
