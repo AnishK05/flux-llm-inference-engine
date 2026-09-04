@@ -15,7 +15,7 @@ from flux.engine.sampler import sample_logits
 from flux.engine.tokenizer import combined_stop_ids, decode_tokens, encode_chat, encode_text
 from flux.engine.types import GenerateResult, SamplingParams
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("flux.engine")
 
 
 class NaiveEngine:
@@ -70,7 +70,7 @@ class NaiveEngine:
                     break
                 input_ids = torch.cat([input_ids, next_id.view(1, 1)], dim=1)
 
-        return _pack_result(
+        return pack_result(
             tokenizer=self.tokenizer,
             prompt_token_ids=prompt_token_ids,
             output_ids=output_ids,
@@ -81,7 +81,7 @@ class NaiveEngine:
         )
 
 
-def _pack_result(
+def pack_result(
     *,
     tokenizer: Any,
     prompt_token_ids: list[int],

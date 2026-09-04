@@ -13,7 +13,7 @@ from typing import Any, Sequence
 import torch
 
 from flux.engine.kv_utils import cache_seq_len
-from flux.engine.naive_engine import _pack_result
+from flux.engine.naive_engine import pack_result
 from flux.engine.sampler import sample_logits
 from flux.engine.tokenizer import combined_stop_ids, decode_tokens, encode_chat, encode_text
 from flux.engine.types import GenerateResult, SamplingParams
@@ -108,7 +108,7 @@ class CachedEngine:
                         break
                     last_token = next_id
 
-        return _pack_result(
+        return pack_result(
             tokenizer=self.tokenizer,
             prompt_token_ids=prompt_token_ids,
             output_ids=output_ids,
