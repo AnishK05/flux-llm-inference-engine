@@ -1,0 +1,28 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Placeholder (Phase 9 will add Flux panels)",
+      "type": "text",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "content": "Flux Grafana dashboard lands in Phase 9. Prometheus is already scraping `host.docker.internal:8000/metrics` once that endpoint exists.",
+        "mode": "markdown"
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["flux"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "title": "Flux (stub)",
+  "uid": "flux-stub",
+  "version": 1
+}
