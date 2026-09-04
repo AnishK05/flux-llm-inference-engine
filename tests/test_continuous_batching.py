@@ -40,6 +40,7 @@ def test_queued_worker_matches_solo_greedy() -> None:
         solo = engine.generate("hello queue", seq.sampling)
         assert seq.result is not None
         assert seq.result.output_token_ids == solo.output_token_ids
+        assert seq.output_ids == solo.output_token_ids
         assert seq.result.engine == "queued"
 
     asyncio.run(main())

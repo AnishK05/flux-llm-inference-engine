@@ -43,7 +43,9 @@ async def _throughput(worker, engine, prompts: list[str], max_tokens: int) -> di
     finally:
         worker.request_stop()
         await asyncio.wait_for(task, timeout=30)
-    tokens = sum(len(seq.output_ids) for seq in seqs)
+    tokens = sum(
+        (seq.result.completion_tokens if seq.result is not None else len(seq.output_ids)) for seq in seqs
+    )
     errors = sum(1 for seq in seqs if seq.result is None)
     return {
         "engine": worker.engine_name,

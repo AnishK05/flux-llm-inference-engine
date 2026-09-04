@@ -105,6 +105,7 @@ class QueuedWorker:
                 result = await asyncio.to_thread(self.engine.generate_ids, seq.prompt_ids, seq.sampling)
                 result.engine = self.engine_name
                 seq.result = result
+                seq.output_ids = list(result.output_token_ids)
                 seq.status = SequenceStatus.FINISHED
                 seq.finished_at = time.perf_counter()
                 self.stats.tokens_generated += result.completion_tokens
