@@ -46,3 +46,67 @@ def test_waiting_status_on_enqueue() -> None:
     seq = _seq()
     RequestQueue(4).try_enqueue(seq)
     assert seq.status == SequenceStatus.WAITING
+
+
+def test_request_too_large_rejected() -> None:
+    from flux.engine.block_pool import BlockPool
+    from flux.engine.scheduler import RequestTooLarge
+
+    scheduler = Scheduler(RequestQueue(16), max_batch=8, pool=BlockPool(1, 16), policy="fcfs")
+    huge = Sequence(prompt_ids=torch.ones(1, 40, dtype=torch.long), sampling=SamplingParams(max_tokens=16))
+    with pytest.raises(RequestTooLarge):
+        scheduler.submit(huge)
+
+
+def test_fcfs_head_of_line_blocks_on_pool() -> None:
+    from flux.engine.block_pool import BlockPool
+
+    scheduler = Scheduler(RequestQueue(16), max_batch=8, pool=BlockPool(2, 16), policy="fcfs")
+    hog = Sequence(prompt_ids=torch.ones(1, 20, dtype=torch.long), sampling=SamplingParams(max_tokens=12))
+    waiter = _seq()
+    third = _seq()
+    scheduler.submit(hog)
+    scheduler.submit(waiter)
+    scheduler.submit(third)
+    first = scheduler.admit(0)
+    assert len(first) == 1
+    assert first[0].id == hog.id
+    assert len(scheduler.queue) == 2
+    assert scheduler.admit(1) == []
+    scheduler.pool.free(hog)
+    rest = scheduler.admit(0)
+    assert [s.id for s in rest] == [waiter.id, third.id]
+
+
+def test_memory_fit_skips_head_that_does_not_fit() -> None:
+    from flux.engine.block_pool import BlockPool
+
+    pool = BlockPool(num_blocks=2, block_size=16)
+    fit = Scheduler(RequestQueue(16), max_batch=8, pool=pool, policy="memory_fit")
+    hog = Sequence(prompt_ids=torch.ones(1, 20, dtype=torch.long), sampling=SamplingParams(max_tokens=12))
+    small = _seq()
+    fit.submit(hog)
+    fit.submit(small)
+    running = Sequence(prompt_ids=torch.ones(1, 8, dtype=torch.long), sampling=SamplingParams(max_tokens=8))
+    assert pool.allocate(running, running.reservation_tokens()) is not None
+    admitted = fit.admit(0)
+    assert [s.id for s in admitted] == [small.id]
+    assert hog.id in fit.queue.snapshot_ids()
+
+
+def test_tiny_pool_third_request_stays_waiting() -> None:
+    from flux.engine.block_pool import BlockPool
+
+    scheduler = Scheduler(RequestQueue(16), max_batch=8, pool=BlockPool(2, 16), policy="fcfs")
+    seqs = [_seq() for _ in range(3)]
+    for seq in seqs:
+        scheduler.submit(seq)
+    admitted = scheduler.admit(0)
+    assert len(admitted) == 2
+    assert len(scheduler.queue) == 1
+    assert scheduler.queue.peek_one().id == seqs[2].id
+    assert scheduler.pool.used_blocks == 2
+    scheduler.pool.free(admitted[0])
+    nxt = scheduler.admit(1)
+    assert [s.id for s in nxt] == [seqs[2].id]
+    assert scheduler.pool.used_blocks == 2

@@ -58,6 +58,11 @@ def test_admin_stats_shape(client_continuous: TestClient) -> None:
     assert body["max_batch_size"] == 8
     assert body["serve_engine"] == "continuous"
     assert "tokens_generated" in body
+    assert "kv_blocks_used" in body
+    assert "kv_blocks_free" in body
+    assert "kv_blocks_total" in body
+    assert body["kv_blocks_used"] == 0
+    assert body["kv_blocks_total"] >= 1
 
 
 def test_admin_stats_after_completion(client_continuous: TestClient) -> None:
@@ -70,6 +75,7 @@ def test_admin_stats_after_completion(client_continuous: TestClient) -> None:
     assert body["tokens_generated"] >= 1
     assert body["waiting"] == 0
     assert body["running"] == 0
+    assert body["kv_blocks_used"] == 0
 
 
 def test_http_429_when_waiting_queue_full() -> None:
