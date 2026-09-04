@@ -1,0 +1,11 @@
+# Flux LLM Inference Engine — runtime dependencies
+# Torch is installed from the CPU wheel index (see scripts/setup.sh) to keep the
+# footprint small and avoid pulling CUDA libraries on CPU-only machines.
+torch==2.4.1
+transformers==4.44.2
+tokenizers==0.19.1
+numpy==1.26.4
+fastapi==0.114.2
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+huggingface-hub==0.24.7

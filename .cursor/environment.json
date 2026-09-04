@@ -1,0 +1,17 @@
+{
+  "name": "Flux LLM Inference Engine",
+  "user": "ubuntu",
+  "install": "bash scripts/setup.sh",
+  "terminals": [
+    {
+      "name": "flux-server",
+      "command": "bash scripts/start.sh"
+    }
+  ],
+  "ports": [
+    {
+      "name": "Flux API + UI",
+      "port": 8000
+    }
+  ]
+}
