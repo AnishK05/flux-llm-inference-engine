@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flux"
+version = "0.1.0"
+description = "Production-style LLM inference server (CPU, Qwen2.5-0.5B)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "torch==2.6.0",
+    "transformers==4.51.3",
+    "accelerate==1.6.0",
+    "fastapi==0.115.12",
+    "uvicorn[standard]==0.34.2",
+    "pydantic-settings==2.8.1",
+    "prometheus-client==0.21.1",
+    "redis==5.2.1",
+    "httpx==0.28.1",
+    "numpy==2.2.4",
+    "python-dotenv==1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.5",
+]
+
+[project.scripts]
+flux-hello = "flux.hello:main"
+flux-api = "flux.server.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+markers = [
+    "integration: downloads Qwen weights and is slow",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
