@@ -12,7 +12,10 @@ router = APIRouter()
 def health(request: Request) -> dict:
     engine = getattr(request.app.state, "engine", None)
     loaded = engine is not None and getattr(engine, "model_loaded", False)
-    return probe(request.app.state.settings, model_loaded=loaded)
+    payload = probe(request.app.state.settings, model_loaded=loaded)
+    if engine is not None:
+        payload["engine_name"] = getattr(engine, "engine_name", None)
+    return payload
 
 
 @router.get("/ready")
