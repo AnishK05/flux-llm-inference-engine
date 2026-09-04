@@ -43,10 +43,13 @@ def load_causal_lm(settings: Settings) -> tuple[Any, Any]:
         tokenizer.pad_token = tokenizer.eos_token
 
     logger.info("loading weights %s dtype=%s device=%s", settings.model, dtype, device)
+    # Qwen2.5 enables sliding window in config; SDPA does not implement it and warns.
+    # Eager is the honest CPU default until we own attention in a later phase.
+    attn_implementation = "eager" if device == "cpu" else "sdpa"
     model = AutoModelForCausalLM.from_pretrained(
         settings.model,
         torch_dtype=dtype,
-        attn_implementation="sdpa",
+        attn_implementation=attn_implementation,
     )
     model.to(device)
     model.eval()
