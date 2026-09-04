@@ -1,4 +1,4 @@
-.PHONY: install test test-integration api hello bench compose-up compose-down
+.PHONY: install test test-integration api hello bench bench-kv compose-up compose-down
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -29,7 +29,10 @@ api: $(VENV)/bin/python
 	$(BIN)/uvicorn flux.server.app:app --host 0.0.0.0 --port 8000
 
 bench:
-	@echo "Benchmark harness lands in Phase 8. Use curl against POST /v1/completions for now."
+	@echo "Full loadgen lands in Phase 8. For now: make bench-kv"
+
+bench-kv: $(VENV)/bin/python
+	$(PY) benchmarks/compare_naive_vs_cached.py --qwen --lengths 32,128 --max-tokens 4 --out docs/phase2_naive_vs_cached.json
 
 compose-up:
 	docker compose up -d redis prometheus grafana

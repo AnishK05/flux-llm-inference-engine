@@ -22,4 +22,13 @@ class GenerateResult:
     finish_reason: str
     latency_s: float
     tokens_per_second: float
+    ttft_s: float = 0.0
+    tpot_s: float | None = None
+    engine: str = ""
     extra: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    role: str
+    content: str

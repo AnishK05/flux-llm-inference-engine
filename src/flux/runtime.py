@@ -68,4 +68,5 @@ def probe(settings: Settings | None = None, model_loaded: bool = False) -> dict[
         "model_id": settings.model,
         "model_loaded": model_loaded,
         "served_model": "flux-qwen-0.5b",
+        "serve_engine": settings.serve_engine,
     }

@@ -29,7 +29,8 @@ def test_naive_forward_grows_full_sequence() -> None:
     lengths = [shape[1] for shape in shapes]
     assert lengths == list(range(lengths[0], lengths[0] + 4))
     for call in model.calls:
-        assert call["kwargs"].get("use_cache") is False
+        assert call["use_cache"] is False
+        assert call["past_len"] == 0
         assert call["kwargs"].get("past_key_values") is None
 
 
