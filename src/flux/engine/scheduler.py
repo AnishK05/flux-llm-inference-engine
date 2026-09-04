@@ -1,15 +1,23 @@
-"""Request waiting queue and FCFS admission."""
+"""Request waiting queue and FCFS / memory-fit admission."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import deque
 
+from flux.engine.block_pool import BlockPool
 from flux.engine.sequence import Sequence, SequenceStatus
+
+logger = logging.getLogger(__name__)
 
 
 class QueueFull(Exception):
     pass
+
+
+class RequestTooLarge(Exception):
+    """Request needs more KV blocks than the entire pool."""
 
 
 class RequestQueue:
@@ -21,6 +29,9 @@ class RequestQueue:
     def __len__(self) -> int:
         return len(self._waiting)
 
+    def __iter__(self):
+        return iter(self._waiting)
+
     def try_enqueue(self, seq: Sequence) -> bool:
         if len(self._waiting) >= self.max_waiting:
             return False
@@ -29,6 +40,11 @@ class RequestQueue:
         self._event.set()
         return True
 
+    def peek_one(self) -> Sequence | None:
+        if not self._waiting:
+            return None
+        return self._waiting[0]
+
     def pop_one(self) -> Sequence | None:
         if not self._waiting:
             return None
@@ -36,6 +52,23 @@ class RequestQueue:
         if not self._waiting:
             self._event.clear()
         return seq
+
+    def push_front(self, seq: Sequence) -> None:
+        self._waiting.appendleft(seq)
+        self._event.set()
+
+    def remove(self, seq: Sequence) -> bool:
+        kept: deque[Sequence] = deque()
+        found = False
+        for item in self._waiting:
+            if not found and item is seq:
+                found = True
+                continue
+            kept.append(item)
+        self._waiting = kept
+        if not self._waiting:
+            self._event.clear()
+        return found
 
     def snapshot_ids(self) -> list[str]:
         return [seq.id for seq in self._waiting]
@@ -49,23 +82,86 @@ class RequestQueue:
 
 
 class Scheduler:
-    """FCFS admission: fill decode slots from the waiting queue."""
+    """Admit waiting sequences into the decode batch.
 
-    def __init__(self, queue: RequestQueue, max_batch: int) -> None:
+    `fcfs`: head-of-line blocking when the oldest request does not fit the pool.
+    `memory_fit`: skip waiters that do not fit and admit the next one that does.
+    """
+
+    def __init__(
+        self,
+        queue: RequestQueue,
+        max_batch: int,
+        pool: BlockPool | None = None,
+        policy: str = "fcfs",
+    ) -> None:
         self.queue = queue
         self.max_batch = max_batch
+        self.pool = pool
+        name = (policy or "fcfs").strip().lower()
+        if name not in {"fcfs", "memory_fit"}:
+            logger.warning("unknown scheduler policy %r, using fcfs", policy)
+            name = "fcfs"
+        self.policy = name
+
+    def submit(self, seq: Sequence) -> None:
+        if self.pool is not None:
+            needed = self.pool.blocks_needed(seq.reservation_tokens())
+            if needed > self.pool.num_blocks:
+                raise RequestTooLarge(
+                    f"request needs {needed} KV blocks but pool has {self.pool.num_blocks}"
+                )
+        if not self.queue.try_enqueue(seq):
+            raise QueueFull(f"waiting queue is full ({self.queue.max_waiting})")
 
     def admit(self, running_count: int) -> list[Sequence]:
         room = max(0, self.max_batch - running_count)
+        if room <= 0:
+            return []
+        if self.policy == "memory_fit":
+            return self._admit_memory_fit(room)
+        return self._admit_fcfs(room)
+
+    def _try_allocate(self, seq: Sequence) -> bool:
+        if self.pool is None:
+            return True
+        return self.pool.allocate(seq, seq.reservation_tokens()) is not None
+
+    def _fits(self, seq: Sequence) -> bool:
+        if self.pool is None:
+            return True
+        return self.pool.can_allocate(seq.reservation_tokens())
+
+    def _admit_fcfs(self, room: int) -> list[Sequence]:
         admitted: list[Sequence] = []
         while room > 0:
-            seq = self.queue.pop_one()
+            seq = self.queue.peek_one()
             if seq is None:
+                break
+            if not self._fits(seq):
+                break
+            self.queue.pop_one()
+            if not self._try_allocate(seq):
+                self.queue.push_front(seq)
                 break
             admitted.append(seq)
             room -= 1
         return admitted
 
-    def submit(self, seq: Sequence) -> None:
-        if not self.queue.try_enqueue(seq):
-            raise QueueFull(f"waiting queue is full ({self.queue.max_waiting})")
+    def _admit_memory_fit(self, room: int) -> list[Sequence]:
+        admitted: list[Sequence] = []
+        while room > 0:
+            chosen: Sequence | None = None
+            for seq in self.queue:
+                if self._fits(seq):
+                    chosen = seq
+                    break
+            if chosen is None:
+                break
+            self.queue.remove(chosen)
+            if not self._try_allocate(chosen):
+                self.queue.push_front(chosen)
+                break
+            admitted.append(chosen)
+            room -= 1
+        return admitted

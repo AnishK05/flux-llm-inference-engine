@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from flux.config import Settings
+from flux.engine.block_pool import BlockPool, resolve_num_kv_blocks
 from flux.engine.cached_engine import CachedEngine
 from flux.engine.scheduler import RequestQueue, Scheduler
 from flux.engine.worker import ContinuousWorker, QueuedWorker
@@ -28,6 +29,7 @@ def attach_worker(app: Any, settings: Settings, engine: Any) -> QueuedWorker | C
     mode = normalize_serve_engine(settings.serve_engine)
     app.state.scheduler = None
     app.state.worker = None
+    app.state.block_pool = None
     if mode not in WORKER_ENGINES:
         return None
     if engine is None:
@@ -35,8 +37,15 @@ def attach_worker(app: Any, settings: Settings, engine: Any) -> QueuedWorker | C
     if not isinstance(engine, CachedEngine):
         logger.warning("serve_engine=%s requires CachedEngine; not starting a worker", mode)
         return None
+    num_blocks = resolve_num_kv_blocks(settings, model=getattr(engine, "model", None))
+    pool = BlockPool(num_blocks, settings.block_size)
     queue = RequestQueue(settings.max_waiting)
-    scheduler = Scheduler(queue, max_batch=settings.max_batch_size)
+    scheduler = Scheduler(
+        queue,
+        max_batch=settings.max_batch_size,
+        pool=pool,
+        policy=settings.scheduler,
+    )
     worker: QueuedWorker | ContinuousWorker
     if mode == "queued":
         worker = QueuedWorker(engine, scheduler)
@@ -44,10 +53,14 @@ def attach_worker(app: Any, settings: Settings, engine: Any) -> QueuedWorker | C
         worker = ContinuousWorker(engine, scheduler)
     app.state.scheduler = scheduler
     app.state.worker = worker
+    app.state.block_pool = pool
     logger.info(
-        "worker attached mode=%s max_waiting=%d max_batch=%d",
+        "worker attached mode=%s policy=%s max_waiting=%d max_batch=%d kv_blocks=%d block_size=%d",
         mode,
+        scheduler.policy,
         settings.max_waiting,
         settings.max_batch_size,
+        pool.num_blocks,
+        pool.block_size,
     )
     return worker
