@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from flux.config import SERVED_MODEL_ALIASES, SERVED_MODEL_ID
 from flux.engine.scheduler import QueueFull, RequestTooLarge
@@ -26,6 +26,7 @@ from flux.server.schemas import (
     CompletionResponse,
     CompletionUsage,
 )
+from flux.metrics.prometheus import observe_finished, observe_request
 from flux.server.sse import chat_chunk, completion_chunk, iter_text_deltas, sse_data
 
 logger = logging.getLogger(__name__)
@@ -87,12 +88,14 @@ def _submit(request: Request, prompt_ids: Any, sampling: SamplingParams) -> Sequ
     try:
         scheduler.submit(seq)
     except QueueFull as exc:
+        observe_request("generate", 429)
         raise HTTPException(
             status_code=429,
             detail="waiting queue is full",
             headers={"Retry-After": "1"},
         ) from exc
     except RequestTooLarge as exc:
+        observe_request("generate", 400)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return seq
 
@@ -126,6 +129,30 @@ def _usage(result: GenerateResult) -> CompletionUsage:
     )
 
 
+def _flux_extra(result: GenerateResult | None) -> dict[str, Any]:
+    if result is None:
+        return {}
+    usage = _usage(result)
+    return {
+        "usage": usage.model_dump(),
+        "flux": {
+            "ttft_ms": round(result.ttft_s * 1000.0, 3),
+            "tpot_ms": round((result.tpot_s or 0.0) * 1000.0, 3),
+            "engine": result.engine,
+        },
+    }
+
+
+def _result_headers(result: GenerateResult) -> dict[str, str]:
+    return {
+        "x-flux-ttft-ms": f"{result.ttft_s * 1000.0:.3f}",
+        "x-flux-tpot-ms": f"{(result.tpot_s or 0.0) * 1000.0:.3f}",
+        "x-flux-prompt-tokens": str(result.prompt_tokens),
+        "x-flux-completion-tokens": str(result.completion_tokens),
+        "x-flux-engine": result.engine or "",
+    }
+
+
 def _sse_response(iterator: AsyncIterator[bytes]) -> StreamingResponse:
     return StreamingResponse(iterator, media_type="text/event-stream", headers=_SSE_HEADERS)
 
@@ -145,7 +172,11 @@ async def _stream_completion(
             yield sse_data(completion_chunk(request_id, created, delta))
         reason = seq.finish_reason or ("abort" if seq.abort_requested else "length")
         if seq.status != SequenceStatus.ABORTED:
-            yield sse_data(completion_chunk(request_id, created, "", finish_reason=reason))
+            yield sse_data(
+                completion_chunk(
+                    request_id, created, "", finish_reason=reason, extra=_flux_extra(seq.result)
+                )
+            )
         yield sse_data("[DONE]")
     except asyncio.CancelledError:
         seq.request_abort()
@@ -171,7 +202,11 @@ async def _stream_chat(
             yield sse_data(chat_chunk(request_id, created, {"content": delta}))
         reason = seq.finish_reason or ("abort" if seq.abort_requested else "length")
         if seq.status != SequenceStatus.ABORTED:
-            yield sse_data(chat_chunk(request_id, created, {}, finish_reason=reason))
+            yield sse_data(
+                chat_chunk(
+                    request_id, created, {}, finish_reason=reason, extra=_flux_extra(seq.result)
+                )
+            )
         yield sse_data("[DONE]")
     except asyncio.CancelledError:
         seq.request_abort()
@@ -201,10 +236,11 @@ async def _stream_from_result(
             yield sse_data(chat_chunk(request_id, created, {"content": delta}))
         else:
             yield sse_data(completion_chunk(request_id, created, delta))
+    extra = _flux_extra(result)
     if kind == "chat":
-        yield sse_data(chat_chunk(request_id, created, {}, finish_reason=result.finish_reason))
+        yield sse_data(chat_chunk(request_id, created, {}, finish_reason=result.finish_reason, extra=extra))
     else:
-        yield sse_data(completion_chunk(request_id, created, "", finish_reason=result.finish_reason))
+        yield sse_data(completion_chunk(request_id, created, "", finish_reason=result.finish_reason, extra=extra))
     yield sse_data("[DONE]")
 
 
@@ -223,18 +259,26 @@ async def create_completion(body: CompletionRequest, request: Request):
     if body.stream:
         if _uses_worker(request):
             seq = _submit(request, prompt_ids, sampling)
+            observe_request("completions", 200)
             return _sse_response(_stream_completion(request, seq, engine.tokenizer, request_id, created))
         result = await _generate_ids(request, engine, prompt_ids, sampling)
+        if not _uses_worker(request):
+            observe_finished(result)
+        observe_request("completions", 200)
         return _sse_response(_stream_from_result(result, "completion", request_id, created, engine.tokenizer))
 
     result = await _generate_ids(request, engine, prompt_ids, sampling)
-    return CompletionResponse(
+    if not _uses_worker(request):
+        observe_finished(result)
+    observe_request("completions", 200)
+    body = CompletionResponse(
         id=request_id,
         created=created,
         model=SERVED_MODEL_ID,
         choices=[CompletionChoice(text=result.text, finish_reason=result.finish_reason)],
         usage=_usage(result),
     )
+    return JSONResponse(content=body.model_dump(), headers=_result_headers(result))
 
 
 @router.post("/v1/chat/completions")
@@ -253,12 +297,19 @@ async def create_chat_completion(body: ChatCompletionRequest, request: Request):
     if body.stream:
         if _uses_worker(request):
             seq = _submit(request, prompt_ids, sampling)
+            observe_request("chat", 200)
             return _sse_response(_stream_chat(request, seq, engine.tokenizer, request_id, created))
         result = await _generate_ids(request, engine, prompt_ids, sampling)
+        if not _uses_worker(request):
+            observe_finished(result)
+        observe_request("chat", 200)
         return _sse_response(_stream_from_result(result, "chat", request_id, created, engine.tokenizer))
 
     result = await _generate_ids(request, engine, prompt_ids, sampling)
-    return ChatCompletionResponse(
+    if not _uses_worker(request):
+        observe_finished(result)
+    observe_request("chat", 200)
+    body = ChatCompletionResponse(
         id=request_id,
         created=created,
         model=SERVED_MODEL_ID,
@@ -270,3 +321,4 @@ async def create_chat_completion(body: ChatCompletionRequest, request: Request):
         ],
         usage=_usage(result),
     )
+    return JSONResponse(content=body.model_dump(), headers=_result_headers(result))

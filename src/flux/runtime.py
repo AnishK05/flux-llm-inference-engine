@@ -48,6 +48,61 @@ def rss_bytes() -> int:
         return int(rss) * 1024
 
 
+def cpu_model() -> str:
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("model name"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return "unknown CPU"
+
+
+def ram_bytes() -> int:
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    return 0
+
+
+def hardware_facts(settings: Settings | None = None) -> dict[str, Any]:
+    settings = settings or Settings()
+    try:
+        intra = torch.get_num_threads()
+    except RuntimeError:
+        intra = parse_intra_threads(settings.intra_threads)
+    ram = ram_bytes()
+    return {
+        "os": "linux",
+        "cpu_model": cpu_model(),
+        "cpu_count": os.cpu_count() or 0,
+        "ram_bytes": ram,
+        "ram_gib": round(ram / 1024**3, 2) if ram else 0,
+        "intra_threads": intra,
+        "device": resolve_device(settings.device),
+        "dtype": settings.dtype,
+        "model": settings.model,
+        "note": (
+            "Official resume numbers should be re-run on the Windows + WSL2 laptop. "
+            "This host is the machine that executed the bench."
+        ),
+    }
+
+
+def hardware_line(settings: Settings | None = None) -> str:
+    facts = hardware_facts(settings)
+    return (
+        f"{facts['os']}, {facts['cpu_model']}, {facts['cpu_count']} cores, "
+        f"{facts['ram_gib']} GiB RAM, FLUX_INTRA_THREADS={facts['intra_threads']}, "
+        f"{facts['model']}, {facts['dtype']} on {facts['device']}"
+    )
+
+
 def probe(settings: Settings | None = None, model_loaded: bool = False) -> dict[str, Any]:
     settings = settings or Settings()
     device = resolve_device(settings.device)

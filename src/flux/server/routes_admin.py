@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from flux.engine.serving import normalize_serve_engine
+from flux.metrics.prometheus import metrics_response
 from flux.runtime import probe, rss_bytes
 
 router = APIRouter()
@@ -63,3 +64,8 @@ def admin_stats(request: Request) -> dict:
     }
     payload.update(kv)
     return payload
+
+
+@router.get("/metrics")
+def metrics(request: Request):
+    return metrics_response(request.app)
