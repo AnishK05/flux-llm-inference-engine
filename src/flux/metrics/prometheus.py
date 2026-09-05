@@ -7,7 +7,10 @@ from typing import Any
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, REGISTRY, generate_latest
 from starlette.responses import Response
 
+from flux.control import RecentTtft
 from flux.runtime import rss_bytes
+
+RECENT_TTFT = RecentTtft()
 
 
 def _existing(name: str):
@@ -103,6 +106,7 @@ def observe_finished(result: Any) -> None:
     tokens = int(getattr(result, "completion_tokens", 0) or 0)
     if ttft > 0:
         TTFT.observe(ttft)
+        RECENT_TTFT.add(ttft)
     if e2e > 0:
         E2E.observe(e2e)
     if tokens > 0:

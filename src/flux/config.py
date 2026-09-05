@@ -27,10 +27,15 @@ class Settings(BaseSettings):
     intra_threads: str = "auto"
     redis_url: str = "redis://localhost:6379/0"
     enable_redis: bool = False
+    rate_limit_per_min: int = 120
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     load_model: bool = True
     max_new_tokens_cap: int = 64
     # naive | cached | queued | continuous. Product default is the Phase 5 loop.
     serve_engine: str = "continuous"
+
+    def cors_origin_list(self) -> list[str]:
+        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
 
 @lru_cache

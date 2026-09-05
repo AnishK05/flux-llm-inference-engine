@@ -29,6 +29,40 @@ from flux.server.schemas import (
 from flux.metrics.prometheus import observe_finished, observe_request
 from flux.server.sse import chat_chunk, completion_chunk, iter_text_deltas, sse_data
 
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client is not None:
+        return request.client.host
+    return "unknown"
+
+
+def _enforce_rate_limit(request: Request) -> None:
+    settings = request.app.state.settings
+    control = getattr(request.app.state, "control", None)
+    if control is None or not getattr(control, "enabled", False):
+        return
+    if control.allow(_client_ip(request), settings.rate_limit_per_min):
+        return
+    observe_request("generate", 429)
+    raise HTTPException(
+        status_code=429,
+        detail="rate limit exceeded",
+        headers={"Retry-After": "1"},
+    )
+
+
+def _remember_job(request: Request, job_id: str, status: str, extra: dict[str, Any] | None = None) -> None:
+    control = getattr(request.app.state, "control", None)
+    if control is None:
+        return
+    payload = {"id": job_id, "status": status}
+    if extra:
+        payload.update(extra)
+    control.put_job(job_id, payload)
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -97,6 +131,7 @@ def _submit(request: Request, prompt_ids: Any, sampling: SamplingParams) -> Sequ
     except RequestTooLarge as exc:
         observe_request("generate", 400)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _remember_job(request, seq.id, "waiting")
     return seq
 
 
@@ -178,6 +213,7 @@ async def _stream_completion(
                 )
             )
         yield sse_data("[DONE]")
+        _remember_job(request, request_id, "finished", {"seq_id": seq.id, "reason": reason})
     except asyncio.CancelledError:
         seq.request_abort()
         raise
@@ -208,6 +244,7 @@ async def _stream_chat(
                 )
             )
         yield sse_data("[DONE]")
+        _remember_job(request, request_id, "finished", {"seq_id": seq.id, "reason": reason})
     except asyncio.CancelledError:
         seq.request_abort()
         raise
@@ -248,6 +285,7 @@ async def _stream_from_result(
 async def create_completion(body: CompletionRequest, request: Request):
     if body.model not in SERVED_MODEL_ALIASES:
         raise HTTPException(status_code=404, detail=f"unknown model {body.model!r}")
+    _enforce_rate_limit(request)
 
     engine = _engine(request)
     sampling = _sampling(request, body.temperature, body.top_p, body.max_tokens)
@@ -259,18 +297,21 @@ async def create_completion(body: CompletionRequest, request: Request):
     if body.stream:
         if _uses_worker(request):
             seq = _submit(request, prompt_ids, sampling)
+            _remember_job(request, request_id, "running", {"seq_id": seq.id})
             observe_request("completions", 200)
             return _sse_response(_stream_completion(request, seq, engine.tokenizer, request_id, created))
         result = await _generate_ids(request, engine, prompt_ids, sampling)
         if not _uses_worker(request):
             observe_finished(result)
         observe_request("completions", 200)
+        _remember_job(request, request_id, "finished", {"engine": result.engine})
         return _sse_response(_stream_from_result(result, "completion", request_id, created, engine.tokenizer))
 
     result = await _generate_ids(request, engine, prompt_ids, sampling)
     if not _uses_worker(request):
         observe_finished(result)
     observe_request("completions", 200)
+    _remember_job(request, request_id, "finished", {"engine": result.engine})
     body = CompletionResponse(
         id=request_id,
         created=created,
@@ -285,6 +326,7 @@ async def create_completion(body: CompletionRequest, request: Request):
 async def create_chat_completion(body: ChatCompletionRequest, request: Request):
     if body.model not in SERVED_MODEL_ALIASES:
         raise HTTPException(status_code=404, detail=f"unknown model {body.model!r}")
+    _enforce_rate_limit(request)
 
     engine = _engine(request)
     sampling = _sampling(request, body.temperature, body.top_p, body.max_tokens)
@@ -297,18 +339,21 @@ async def create_chat_completion(body: ChatCompletionRequest, request: Request):
     if body.stream:
         if _uses_worker(request):
             seq = _submit(request, prompt_ids, sampling)
+            _remember_job(request, request_id, "running", {"seq_id": seq.id})
             observe_request("chat", 200)
             return _sse_response(_stream_chat(request, seq, engine.tokenizer, request_id, created))
         result = await _generate_ids(request, engine, prompt_ids, sampling)
         if not _uses_worker(request):
             observe_finished(result)
         observe_request("chat", 200)
+        _remember_job(request, request_id, "finished", {"engine": result.engine})
         return _sse_response(_stream_from_result(result, "chat", request_id, created, engine.tokenizer))
 
     result = await _generate_ids(request, engine, prompt_ids, sampling)
     if not _uses_worker(request):
         observe_finished(result)
     observe_request("chat", 200)
+    _remember_job(request, request_id, "finished", {"engine": result.engine})
     body = ChatCompletionResponse(
         id=request_id,
         created=created,
