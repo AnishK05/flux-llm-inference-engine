@@ -18,6 +18,10 @@ export type EngineStats = {
   kv_blocks_total: number;
   serve_engine: string;
   scheduler: string;
+  prefix_entries?: number;
+  prefix_hits?: number;
+  prefix_misses?: number;
+  prefix_tokens_saved?: number;
 };
 
 export type BenchRun = {

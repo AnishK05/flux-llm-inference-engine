@@ -28,6 +28,7 @@ class BlockPool:
         self.block_size = block_size
         self._free: deque[int] = deque(range(num_blocks))
         self._alloc: dict[str, list[int]] = {}
+        self._anon: dict[str, list[int]] = {}
 
     @property
     def free_blocks(self) -> int:
@@ -47,25 +48,55 @@ class BlockPool:
 
     def allocate(self, seq: Sequence, num_tokens: int) -> list[int] | None:
         """Reserve blocks for the worst-case length of `seq`. None if it does not fit."""
-        needed = self.blocks_needed(num_tokens)
-        if needed == 0:
-            self._alloc[seq.id] = []
-            seq.block_ids = []
-            return []
-        if needed > self.free_blocks:
+        ids = self.reserve(num_tokens)
+        if ids is None:
             return None
-        ids = [self._free.popleft() for _ in range(needed)]
         self._alloc[seq.id] = ids
         seq.block_ids = list(ids)
         return ids
 
+    def reserve(self, num_tokens: int, *, key: str | None = None) -> list[int] | None:
+        """Reserve blocks not tied to a sequence (prefix cache). None if they do not fit."""
+        needed = self.blocks_needed(num_tokens)
+        if needed == 0:
+            ids: list[int] = []
+        elif needed > self.free_blocks:
+            return None
+        else:
+            ids = [self._free.popleft() for _ in range(needed)]
+        if key is not None:
+            self._anon[key] = list(ids)
+        return ids
+
+    def release(self, ids: list[int], *, key: str | None = None) -> None:
+        if key is not None:
+            stored = self._anon.pop(key, None)
+            if stored is None:
+                return
+            ids = stored
+        for block_id in ids:
+            self._free.append(block_id)
+
+    def detach(self, seq: Sequence, n_blocks: int) -> list[int]:
+        """Take the first `n_blocks` of `seq`'s allocation without freeing them."""
+        ids = self._alloc.setdefault(
+            seq.id, list(getattr(seq, "owned_block_ids", None) or seq.block_ids or [])
+        )
+        n = max(0, min(int(n_blocks), len(ids)))
+        taken = ids[:n]
+        del ids[:n]
+        seq.owned_block_ids = list(ids)
+        return list(taken)
+
     def free(self, seq: Sequence) -> None:
         ids = self._alloc.pop(seq.id, None)
         if ids is None:
-            ids = list(seq.block_ids)
+            ids = list(getattr(seq, "owned_block_ids", None) or seq.block_ids)
         for block_id in ids:
             self._free.append(block_id)
         seq.block_ids = []
+        if hasattr(seq, "owned_block_ids"):
+            seq.owned_block_ids = []
 
     def snapshot(self) -> dict[str, int]:
         return {

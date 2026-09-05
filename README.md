@@ -4,7 +4,7 @@ Production-style LLM inference platform: serving, continuous batching, KV-cache 
 
 **Target setup:** Windows laptop, **CPU only**, `Qwen/Qwen2.5-0.5B-Instruct`. Develop in [WSL2](docs/windows-wsl2.md).
 
-The full build plan is in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md). This tree implements **Phases 0–11**.
+The full build plan is in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md). This tree implements **Phases 0–12**.
 
 The engine is device-agnostic; this repo is validated on CPU.
 
@@ -14,7 +14,7 @@ The engine is device-agnostic; this repo is validated on CPU.
 |---|---|
 | `make hello` | Allocate a 1000×1000 fp32 CPU tensor and print device / RSS / thread facts |
 | `GET /health` | Probe + `serve_engine` (`continuous` by default) |
-| `GET /admin/stats` | Waiting / running ids, last batch size, KV, RSS, tok/s, p50 TTFT |
+| `GET /admin/stats` | Waiting / running ids, last batch size, KV, prefix hits, RSS, tok/s, p50 TTFT |
 | `GET /metrics` | Prometheus text |
 | Next.js dashboard | Playground, live engine (the interview page), bench table |
 | Compose | `api` + `dashboard` + redis + prometheus + grafana |
@@ -77,6 +77,8 @@ Grafana: http://127.0.0.1:3001 — dashboard **Flux serving**. Password `flux`.
 ![Grafana Flux serving](docs/grafana-serving.webp)
 
 Serving modes: `continuous` (default), `queued`, `cached`, `naive`. Do not set `uvicorn --workers` above 1.
+
+Prefix / system-prompt KV reuse (Phase 12) is on by default for queued and continuous serving (`FLUX_ENABLE_PREFIX_CACHE=true`). Identical leading token ids clone a stored prefix cache and prefill only the suffix — the usual playground win is a shared system prompt. Decode still owns a private cache. Admin stats expose `prefix_hits` / `prefix_tokens_saved`.
 
 ```bash
 make test-integration

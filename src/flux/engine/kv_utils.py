@@ -26,6 +26,25 @@ def cache_layer_shapes(cache: Any) -> list[tuple[tuple[int, ...], tuple[int, ...
     return [(tuple(k.shape), tuple(v.shape)) for k, v in iter_kv(cache)]
 
 
+def slice_cache(cache: Any, n_tokens: int) -> list[tuple[Any, Any]]:
+    """Copy the first `n_tokens` positions into a new list-of-(K, V) cache."""
+    if n_tokens < 0:
+        raise ValueError("n_tokens must be >= 0")
+    out: list[tuple[Any, Any]] = []
+    for key, value in iter_kv(cache):
+        out.append(
+            (
+                key[..., :n_tokens, :].contiguous().clone(),
+                value[..., :n_tokens, :].contiguous().clone(),
+            )
+        )
+    return out
+
+
+def clone_cache(cache: Any) -> list[tuple[Any, Any]]:
+    return slice_cache(cache, cache_seq_len(cache))
+
+
 def describe_cache(cache: Any) -> dict[str, Any]:
     shapes = cache_layer_shapes(cache)
     if not shapes:
