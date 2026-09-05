@@ -15,6 +15,7 @@ from flux.engine.sampler import sample_logits
 from flux.engine.scheduler import Scheduler
 from flux.engine.sequence import Sequence, SequenceStatus
 from flux.engine.tokenizer import combined_stop_ids
+from flux.metrics.prometheus import observe_finished, observe_step
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ def _finish_sequence(seq: Sequence, tokenizer: Any, engine_name: str, scheduler:
     )
     seq.status = SequenceStatus.FINISHED
     seq.finished_at = time.perf_counter()
+    observe_finished(seq.result)
     _release(seq, scheduler)
     _signal_end(seq)
 
@@ -159,7 +161,9 @@ class QueuedWorker:
         stop_ids = combined_stop_ids(
             self.engine.tokenizer, seq.sampling.stop_token_ids, seq.sampling.ignore_eos
         )
+        t0 = time.perf_counter()
         logits, cache = self.engine.prefill(seq.prompt_ids)
+        observe_step("prefill", time.perf_counter() - t0)
         next_id = sample_logits(logits, seq.sampling)
         token = int(next_id.item())
         _note_token(seq, token, stop_ids)
@@ -176,7 +180,9 @@ class QueuedWorker:
             if _wants_abort(seq):
                 _abort_one(seq, self.scheduler)
                 return
+            t0 = time.perf_counter()
             logits, cache = self.engine.decode(last_token, cache)
+            observe_step("decode", time.perf_counter() - t0)
             next_id = sample_logits(logits, seq.sampling)
             token = int(next_id.item())
             _note_token(seq, token, stop_ids)
@@ -255,7 +261,9 @@ class ContinuousWorker:
             self.engine.tokenizer, seq.sampling.stop_token_ids, seq.sampling.ignore_eos
         )
         try:
+            t0 = time.perf_counter()
             logits, cache = self.engine.prefill(seq.prompt_ids)
+            observe_step("prefill", time.perf_counter() - t0)
             next_id = sample_logits(logits, seq.sampling)
             token = int(next_id.item())
             _note_token(seq, token, stop_ids)
@@ -299,7 +307,9 @@ class ContinuousWorker:
         tokens = torch.tensor([seq.last_token for seq in live], dtype=torch.long, device=self.engine.device)
         caches = [seq.kv_cache for seq in live]
         try:
+            t0 = time.perf_counter()
             logits, new_caches = self.engine.decode_batch(tokens, caches)
+            observe_step("decode", time.perf_counter() - t0)
         except Exception as exc:  # noqa: BLE001
             logger.exception("decode_batch failed n=%d", len(live))
             for seq in live:

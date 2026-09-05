@@ -8,21 +8,120 @@
   "panels": [
     {
       "id": 1,
-      "title": "Placeholder (Phase 9 will add Flux panels)",
-      "type": "text",
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
-      "options": {
-        "content": "Flux Grafana dashboard lands in Phase 9. Prometheus is already scraping `host.docker.internal:8000/metrics` once that endpoint exists.",
-        "mode": "markdown"
-      }
+      "title": "In-flight / waiting / running",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "flux_in_flight", "legendFormat": "in_flight", "refId": "A" },
+        { "expr": "flux_waiting", "legendFormat": "waiting", "refId": "B" },
+        { "expr": "flux_running", "legendFormat": "running", "refId": "C" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "p99 TTFT",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(flux_ttft_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p99 TTFT",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "TTFT histogram",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": { "calculate": false, "yAxis": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "sum(increase(flux_ttft_seconds_bucket[5m])) by (le)",
+          "legendFormat": "{{le}}",
+          "format": "heatmap",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Decode tokens / s",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(flux_output_tokens_total[1m])", "legendFormat": "tok/s", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "KV pool",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "flux_kv_blocks_used", "legendFormat": "used", "refId": "A" },
+        { "expr": "flux_kv_blocks_total", "legendFormat": "total", "refId": "B" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Decode batch size",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "flux_decode_batch_size", "legendFormat": "B", "refId": "A" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "RSS",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "flux_rss_bytes", "legendFormat": "RSS", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Prefill vs decode step time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "rate(flux_prefill_seconds_sum[1m]) / rate(flux_prefill_seconds_count[1m])",
+          "legendFormat": "prefill avg",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(flux_decode_step_seconds_sum[1m]) / rate(flux_decode_step_seconds_count[1m])",
+          "legendFormat": "decode step avg",
+          "refId": "B"
+        }
+      ]
     }
   ],
+  "refresh": "5s",
   "schemaVersion": 39,
   "tags": ["flux"],
   "templating": { "list": [] },
   "time": { "from": "now-15m", "to": "now" },
   "timezone": "browser",
-  "title": "Flux (stub)",
-  "uid": "flux-stub",
+  "title": "Flux serving",
+  "uid": "flux-serving",
   "version": 1
 }

@@ -65,7 +65,7 @@ def create_app(settings: Settings | None = None, engine: Any = None) -> FastAPI:
     app = FastAPI(
         title="Flux",
         version="0.1.0",
-        description="CPU LLM inference server — KV block pool + SSE streaming",
+        description="CPU LLM inference server — loadgen + Prometheus metrics",
         lifespan=lifespan,
     )
     app.state.settings = settings

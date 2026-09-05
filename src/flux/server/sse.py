@@ -25,8 +25,9 @@ def completion_chunk(
     created: int,
     text: str,
     finish_reason: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "id": request_id,
         "object": "text_completion",
         "created": created,
@@ -40,6 +41,9 @@ def completion_chunk(
             }
         ],
     }
+    if extra:
+        payload.update(extra)
+    return payload
 
 
 def chat_chunk(
@@ -47,8 +51,9 @@ def chat_chunk(
     created: int,
     delta: dict[str, str],
     finish_reason: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "id": request_id,
         "object": "chat.completion.chunk",
         "created": created,
@@ -61,6 +66,9 @@ def chat_chunk(
             }
         ],
     }
+    if extra:
+        payload.update(extra)
+    return payload
 
 
 async def iter_text_deltas(seq: Sequence, tokenizer: Any) -> AsyncIterator[str]:
