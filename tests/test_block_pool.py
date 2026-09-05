@@ -33,6 +33,27 @@ def test_allocate_returns_none_when_full() -> None:
     assert pool.used_blocks == 1
 
 
+def test_reserve_release_and_detach() -> None:
+    pool = BlockPool(num_blocks=4, block_size=16)
+    seq = _seq()
+    assert pool.allocate(seq, 48) is not None
+    assert pool.used_blocks == 3
+    taken = pool.detach(seq, 2)
+    assert len(taken) == 2
+    assert len(seq.owned_block_ids) == 1
+    assert pool.used_blocks == 3
+    pool.release(taken)
+    assert pool.used_blocks == 1
+    pool.free(seq)
+    assert pool.used_blocks == 0
+    assert pool.reserve(16, key="prefix:1") is not None
+    assert pool.used_blocks == 1
+    pool.release([], key="prefix:1")
+    assert pool.used_blocks == 0
+    pool.release([], key="prefix:missing")
+    assert pool.used_blocks == 0
+
+
 def test_blocks_needed() -> None:
     pool = BlockPool(num_blocks=8, block_size=16)
     assert pool.blocks_needed(0) == 0
