@@ -1089,8 +1089,8 @@ Then fill the resume template in Section 1 from that doc.
 - [ ] Phase 7  SSE + abort/free
 - [x] Phase 8  Loadgen + naive vs Flux report (CPU scenarios)
 - [x] Phase 9  Prometheus / Grafana
-- [ ] Phase 10 Next.js live + playground
-- [ ] Phase 11 CPU Compose quickstart
+- [x] Phase 10 Next.js live + playground
+- [x] Phase 11 CPU Compose quickstart
 - [ ] Phase 12 Prefix-cache stretch
 - [ ] Rewrite resume numbers from `docs/benchmark_results.md`
 

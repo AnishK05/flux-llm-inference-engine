@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #07090d;
+  color: #e7ecf3;
+}
+
+.bar-track {
+  background: #161b22;
+  border: 1px solid #2a3340;
+}
+
+.chip {
+  @apply rounded border border-emerald-800/70 bg-emerald-950/60 px-2 py-0.5 font-mono text-[11px] text-emerald-200;
+}

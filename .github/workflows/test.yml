@@ -21,3 +21,20 @@ jobs:
           pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Unit tests (no Qwen download)
         run: pytest -q -m "not integration"
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

@@ -7,12 +7,15 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from flux.config import Settings, get_settings
+from flux.control import TokenRate
 from flux.engine.cached_engine import CachedEngine
 from flux.engine.naive_engine import NaiveEngine
 from flux.engine.serving import attach_worker, normalize_serve_engine
+from flux.redis_client import attach_control_plane
 from flux.runtime import apply_thread_caps
 from flux.server.routes_admin import router as admin_router
 from flux.server.routes_openai import router as openai_router
@@ -45,10 +48,14 @@ def create_app(settings: Settings | None = None, engine: Any = None) -> FastAPI:
             app.state.engine = build_engine(model, tokenizer, settings)
             logger.info("startup: model ready engine=%s", getattr(app.state.engine, "engine_name", "?"))
         worker = attach_worker(app, settings, app.state.engine)
+        app.state.control = attach_control_plane(settings)
         task: asyncio.Task | None = None
         if worker is not None:
             task = asyncio.create_task(worker.run(), name=f"flux-{worker.engine_name}")
         yield
+        control = getattr(app.state, "control", None)
+        if control is not None:
+            control.close()
         if worker is not None:
             worker.request_stop()
         if task is not None:
@@ -73,6 +80,24 @@ def create_app(settings: Settings | None = None, engine: Any = None) -> FastAPI:
     app.state.generate_lock = asyncio.Lock()
     app.state.scheduler = None
     app.state.worker = None
+    app.state.control = None
+    app.state.token_rate = TokenRate()
+    origins = settings.cors_origin_list()
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=[
+                "x-flux-ttft-ms",
+                "x-flux-tpot-ms",
+                "x-flux-prompt-tokens",
+                "x-flux-completion-tokens",
+                "x-flux-engine",
+            ],
+        )
     app.include_router(admin_router)
     app.include_router(openai_router)
 
