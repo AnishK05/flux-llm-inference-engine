@@ -1,12 +1,46 @@
-# Phase 0 stub: control-plane and observability sidecars.
-# The API still runs with `make api` on the host (CPU PyTorch).
-# Phase 11 will add the api + dashboard services.
+# CPU-only demo: api + dashboard + control plane + observability.
+# First `docker compose up` downloads ~1 GB of Qwen weights into the hf-cache volume.
+# The engine is device-agnostic; this repo is validated on CPU. No GPU profile.
 
 services:
   redis:
     image: redis:7.4-alpine
     ports:
       - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      FLUX_MODEL: ${FLUX_MODEL:-Qwen/Qwen2.5-0.5B-Instruct}
+      FLUX_DEVICE: cpu
+      FLUX_DTYPE: fp32
+      FLUX_MAX_BATCH_SIZE: ${FLUX_MAX_BATCH_SIZE:-8}
+      FLUX_MAX_SEQ_LEN: ${FLUX_MAX_SEQ_LEN:-1024}
+      FLUX_ENABLE_REDIS: "true"
+      FLUX_REDIS_URL: redis://redis:6379/0
+      FLUX_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      HF_HOME: /models
+    volumes:
+      - hf-cache:/models
+    depends_on:
+      - redis
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_FLUX_API: http://localhost:8000
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_FLUX_API: http://localhost:8000
+    depends_on:
+      - api
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -16,6 +50,8 @@ services:
       - "9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - api
 
   grafana:
     image: grafana/grafana:11.5.2
@@ -30,3 +66,8 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  hf-cache:

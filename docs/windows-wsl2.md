@@ -53,6 +53,14 @@ make api      # naive completions server (downloads Qwen 0.5B on first run)
 
 First `make api` downloads ~1 GB of Qwen2.5-0.5B-Instruct into `HF_HOME` (defaults to `./.hf-cache`). Later runs reuse it.
 
+One-command demo after Docker Desktop is wired to Ubuntu:
+
+```bash
+docker compose up --build
+```
+
+Playground: http://127.0.0.1:3000 — first compose run also downloads those weights into the `hf-cache` volume.
+
 ## 5. Line endings
 
 The repo forces LF via `.gitattributes`. If Git on Windows ever checks out CRLF into WSL2, `git add --renormalize .` from Ubuntu.

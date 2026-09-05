@@ -1,4 +1,4 @@
-.PHONY: install test test-integration api hello bench bench-kv bench-batch bench-quick compose-up compose-down
+.PHONY: install test test-integration api hello bench bench-kv bench-batch bench-quick dashboard compose-up compose-down
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -43,8 +43,11 @@ bench-batch: $(VENV)/bin/python
 # Prefer Compose V2 (`docker compose`); fall back to the v1 binary.
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo docker-compose)
 
+dashboard:
+	cd dashboard && npm install && npm run dev
+
 compose-up:
-	$(COMPOSE) up -d redis prometheus grafana
+	$(COMPOSE) up -d --build
 
 compose-down:
 	$(COMPOSE) down
