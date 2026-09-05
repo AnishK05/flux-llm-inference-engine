@@ -10,6 +10,7 @@ from typing import Any
 import torch
 
 from flux.engine.cached_engine import CachedEngine
+from flux.engine.kv_utils import clone_cache
 from flux.engine.naive_engine import pack_result
 from flux.engine.sampler import sample_logits
 from flux.engine.scheduler import Scheduler
@@ -46,10 +47,67 @@ def _signal_end(seq: Sequence) -> None:
     seq.finished_event.set()
 
 
+def _prefix_cache(scheduler: Scheduler):
+    return getattr(scheduler, "prefix_cache", None)
+
+
+def _bind_prefix_at_prefill(seq: Sequence, scheduler: Scheduler) -> None:
+    """Late-bind a prefix hit after a sibling in this batch has inserted."""
+    cache = _prefix_cache(scheduler)
+    if cache is None or seq.prefix_key is not None:
+        return
+    hit = cache.lookup(seq.prompt_token_ids)
+    if hit is None:
+        return
+    seq.prefix_key = hit.token_ids
+    seq.prefix_tokens = hit.n_tokens
+    seq.prefix_kv = hit.kv_cache
+    seq.prefix_logits = hit.last_logits
+    pool = scheduler.pool
+    if pool is None:
+        return
+    extra = pool.detach(seq, pool.blocks_needed(hit.n_tokens))
+    if extra:
+        pool.release(extra)
+    seq.owned_block_ids = list(pool._alloc.get(seq.id, []))
+    seq.block_ids = list(hit.block_ids) + list(seq.owned_block_ids)
+
+
+def _prefill_with_reuse(engine: CachedEngine, seq: Sequence, scheduler: Scheduler):
+    _bind_prefix_at_prefill(seq, scheduler)
+    cache = _prefix_cache(scheduler)
+    prompt_ids = seq.prompt_token_ids
+    if seq.prefix_tokens > 0 and seq.prefix_kv is not None:
+        prefix = clone_cache(seq.prefix_kv)
+        exact = seq.prefix_logits is not None and seq.prefix_tokens >= len(prompt_ids)
+        if exact:
+            logits = seq.prefix_logits
+            if hasattr(logits, "detach"):
+                logits = logits.detach().clone()
+            kv = prefix
+        else:
+            suffix = prompt_ids[seq.prefix_tokens :]
+            if suffix:
+                logits, kv = engine.prefill_from_prefix(suffix, prefix)
+            else:
+                logits, kv = engine.prefill(seq.prompt_ids)
+    else:
+        logits, kv = engine.prefill(seq.prompt_ids)
+    if cache is not None:
+        cache.insert(prompt_ids, kv, logits, list(seq.block_ids))
+        cache.adopt(seq)
+    return logits, kv
+
+
 def _release(seq: Sequence, scheduler: Scheduler) -> None:
+    cache = _prefix_cache(scheduler)
+    if cache is not None:
+        cache.release(seq.prefix_key)
     if scheduler.pool is not None:
         scheduler.pool.free(seq)
     seq.kv_cache = None
+    seq.prefix_kv = None
+    seq.prefix_logits = None
 
 
 def _abort_one(seq: Sequence, scheduler: Scheduler) -> None:
@@ -162,7 +220,7 @@ class QueuedWorker:
             self.engine.tokenizer, seq.sampling.stop_token_ids, seq.sampling.ignore_eos
         )
         t0 = time.perf_counter()
-        logits, cache = self.engine.prefill(seq.prompt_ids)
+        logits, cache = _prefill_with_reuse(self.engine, seq, self.scheduler)
         observe_step("prefill", time.perf_counter() - t0)
         next_id = sample_logits(logits, seq.sampling)
         token = int(next_id.item())
@@ -262,7 +320,7 @@ class ContinuousWorker:
         )
         try:
             t0 = time.perf_counter()
-            logits, cache = self.engine.prefill(seq.prompt_ids)
+            logits, cache = _prefill_with_reuse(self.engine, seq, self.scheduler)
             observe_step("prefill", time.perf_counter() - t0)
             next_id = sample_logits(logits, seq.sampling)
             token = int(next_id.item())
