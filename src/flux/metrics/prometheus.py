@@ -59,6 +59,10 @@ IN_FLIGHT = _gauge("flux_in_flight", "Waiting plus running sequences")
 KV_USED = _gauge("flux_kv_blocks_used", "KV blocks currently reserved")
 KV_TOTAL = _gauge("flux_kv_blocks_total", "KV blocks in the accounting pool")
 DECODE_BATCH = _gauge("flux_decode_batch_size", "Last decode batch size")
+PREFIX_ENTRIES = _gauge("flux_prefix_entries", "Stored prefix-cache entries")
+PREFIX_HITS = _gauge("flux_prefix_hits", "Prefix-cache hits since process start")
+PREFIX_MISSES = _gauge("flux_prefix_misses", "Prefix-cache misses since process start")
+PREFIX_TOKENS = _gauge("flux_prefix_tokens_saved", "Prompt tokens skipped by prefix reuse")
 RSS = _gauge("flux_rss_bytes", "Process resident set size in bytes")
 TOKENS = _counter("flux_output_tokens_total", "Output tokens generated")
 REQUESTS = _counter("flux_http_requests_total", "HTTP generate requests", ["endpoint", "status"])
@@ -86,6 +90,20 @@ def update_gauges(app: Any) -> None:
     else:
         KV_USED.set(0)
         KV_TOTAL.set(0)
+    prefix = getattr(app.state, "prefix_cache", None)
+    if prefix is None and scheduler is not None:
+        prefix = getattr(scheduler, "prefix_cache", None)
+    if prefix is not None:
+        snap = prefix.snapshot()
+        PREFIX_ENTRIES.set(snap["prefix_entries"])
+        PREFIX_HITS.set(snap["prefix_hits"])
+        PREFIX_MISSES.set(snap["prefix_misses"])
+        PREFIX_TOKENS.set(snap["prefix_tokens_saved"])
+    else:
+        PREFIX_ENTRIES.set(0)
+        PREFIX_HITS.set(0)
+        PREFIX_MISSES.set(0)
+        PREFIX_TOKENS.set(0)
     RSS.set(rss_bytes())
 
 

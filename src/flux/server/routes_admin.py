@@ -82,6 +82,21 @@ def admin_stats(request: Request) -> dict:
         "scheduler": getattr(scheduler, "policy", settings.scheduler) if scheduler else settings.scheduler,
     }
     payload.update(kv)
+    prefix = getattr(request.app.state, "prefix_cache", None)
+    if prefix is None and scheduler is not None:
+        prefix = getattr(scheduler, "prefix_cache", None)
+    if prefix is not None:
+        payload.update(prefix.snapshot())
+    else:
+        payload.update(
+            {
+                "prefix_entries": 0,
+                "prefix_hits": 0,
+                "prefix_misses": 0,
+                "prefix_tokens_saved": 0,
+                "prefix_live_refs": 0,
+            }
+        )
     return payload
 
 
