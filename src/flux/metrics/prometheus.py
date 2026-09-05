@@ -8,7 +8,10 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, RE
 from starlette.responses import Response
 
 from flux.control import RecentTtft
+from flux.engine.sequence import SequenceStatus
 from flux.runtime import rss_bytes
+
+_DONE = {SequenceStatus.FINISHED, SequenceStatus.ABORTED, SequenceStatus.ERROR}
 
 RECENT_TTFT = RecentTtft()
 
@@ -79,7 +82,11 @@ def update_gauges(app: Any) -> None:
     if pool is None and scheduler is not None:
         pool = getattr(scheduler, "pool", None)
     waiting = len(scheduler.queue) if scheduler is not None else 0
-    running = len(worker.stats.running) if worker is not None else 0
+    running = (
+        sum(1 for seq in worker.stats.running if seq.status not in _DONE)
+        if worker is not None
+        else 0
+    )
     WAITING.set(waiting)
     RUNNING.set(running)
     IN_FLIGHT.set(waiting + running)

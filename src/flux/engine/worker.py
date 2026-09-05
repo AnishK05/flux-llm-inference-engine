@@ -56,6 +56,8 @@ def _bind_prefix_at_prefill(seq: Sequence, scheduler: Scheduler) -> None:
     cache = _prefix_cache(scheduler)
     if cache is None or seq.prefix_key is not None:
         return
+    if cache.peek(seq.prompt_token_ids) is None:
+        return
     hit = cache.lookup(seq.prompt_token_ids)
     if hit is None:
         return

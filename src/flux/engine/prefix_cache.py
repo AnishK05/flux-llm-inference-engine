@@ -79,19 +79,20 @@ class PrefixCache:
         return lengths
 
     def peek(self, token_ids: list[int]) -> PrefixHit | None:
-        """Longest matching prefix without taking a ref or reserving blocks."""
-        for n in self.candidate_lengths(token_ids):
+        """Longest matching stored prefix without taking a ref or reserving blocks."""
+        n = len(token_ids)
+        while n >= self.min_tokens:
             key = tuple(token_ids[:n])
             entry = self._entries.get(key)
-            if entry is None:
-                continue
-            return PrefixHit(
-                token_ids=key,
-                n_tokens=n,
-                block_ids=list(entry.block_ids),
-                kv_cache=entry.kv_cache,
-                last_logits=entry.last_logits if n == len(token_ids) else None,
-            )
+            if entry is not None:
+                return PrefixHit(
+                    token_ids=key,
+                    n_tokens=n,
+                    block_ids=list(entry.block_ids),
+                    kv_cache=entry.kv_cache,
+                    last_logits=entry.last_logits if n == len(token_ids) else None,
+                )
+            n -= 1
         return None
 
     def lookup(self, token_ids: list[int]) -> PrefixHit | None:
