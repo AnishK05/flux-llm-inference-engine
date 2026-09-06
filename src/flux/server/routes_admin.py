@@ -6,9 +6,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from flux.engine.sequence import SequenceStatus
 from flux.engine.serving import normalize_serve_engine
 from flux.metrics.prometheus import RECENT_TTFT, metrics_response
 from flux.runtime import probe, rss_bytes
+
+_DONE = {SequenceStatus.FINISHED, SequenceStatus.ABORTED, SequenceStatus.ERROR}
 
 router = APIRouter()
 
@@ -50,7 +53,11 @@ def admin_stats(request: Request) -> dict:
     scheduler = getattr(request.app.state, "scheduler", None)
     worker = getattr(request.app.state, "worker", None)
     waiting_ids = scheduler.queue.snapshot_ids() if scheduler is not None else []
-    running = list(worker.stats.running) if worker is not None else []
+    running = [
+        seq
+        for seq in (worker.stats.running if worker is not None else [])
+        if seq.status not in _DONE
+    ]
     running_ids = [seq.id for seq in running]
     last_batch = worker.stats.last_batch_size if worker is not None else 0
     tokens = worker.stats.tokens_generated if worker is not None else 0
@@ -82,6 +89,21 @@ def admin_stats(request: Request) -> dict:
         "scheduler": getattr(scheduler, "policy", settings.scheduler) if scheduler else settings.scheduler,
     }
     payload.update(kv)
+    prefix = getattr(request.app.state, "prefix_cache", None)
+    if prefix is None and scheduler is not None:
+        prefix = getattr(scheduler, "prefix_cache", None)
+    if prefix is not None:
+        payload.update(prefix.snapshot())
+    else:
+        payload.update(
+            {
+                "prefix_entries": 0,
+                "prefix_hits": 0,
+                "prefix_misses": 0,
+                "prefix_tokens_saved": 0,
+                "prefix_live_refs": 0,
+            }
+        )
     return payload
 
 

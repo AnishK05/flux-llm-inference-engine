@@ -21,6 +21,10 @@ const EMPTY: EngineStats = {
   kv_blocks_total: 0,
   serve_engine: "—",
   scheduler: "—",
+  prefix_entries: 0,
+  prefix_hits: 0,
+  prefix_misses: 0,
+  prefix_tokens_saved: 0,
 };
 
 export function LiveEngine() {
@@ -71,6 +75,11 @@ export function LiveEngine() {
         <Stat label="In flight" value={String(stats.in_flight)} hint={`${stats.waiting} waiting · ${stats.running} running`} huge />
         <Stat label="tok/s" value={stats.tok_s.toFixed(1)} hint={`${stats.tokens_generated} total`} />
         <Stat label="p50 TTFT" value={stats.ttft_p50_ms == null ? "—" : `${stats.ttft_p50_ms.toFixed(0)} ms`} hint="last 60s" />
+        <Stat
+          label="Prefix hits"
+          value={String(stats.prefix_hits ?? 0)}
+          hint={`${stats.prefix_entries ?? 0} entries · ${stats.prefix_tokens_saved ?? 0} tok saved`}
+        />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded border border-zinc-800 bg-zinc-950 p-4">

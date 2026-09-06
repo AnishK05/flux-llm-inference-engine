@@ -936,6 +936,8 @@ FLUX_SCHEDULER=fcfs          # fcfs | memory_fit
 FLUX_INTRA_THREADS=auto      # min(8, cpu_count)
 FLUX_REDIS_URL=redis://localhost:6379/0
 FLUX_ENABLE_REDIS=false
+FLUX_ENABLE_PREFIX_CACHE=true
+FLUX_PREFIX_CACHE_MAX_ENTRIES=64
 ```
 
 When `FLUX_NUM_KV_BLOCKS=auto`:
@@ -1091,7 +1093,7 @@ Then fill the resume template in Section 1 from that doc.
 - [x] Phase 9  Prometheus / Grafana
 - [x] Phase 10 Next.js live + playground
 - [x] Phase 11 CPU Compose quickstart
-- [ ] Phase 12 Prefix-cache stretch
+- [x] Phase 12 Prefix-cache stretch
 - [ ] Rewrite resume numbers from `docs/benchmark_results.md`
 
 ---

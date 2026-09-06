@@ -63,6 +63,8 @@ def test_admin_stats_shape(client_continuous: TestClient) -> None:
     assert "kv_blocks_total" in body
     assert body["kv_blocks_used"] == 0
     assert body["kv_blocks_total"] >= 1
+    assert "prefix_hits" in body
+    assert body["prefix_entries"] == 0
 
 
 def test_admin_stats_after_completion(client_continuous: TestClient) -> None:

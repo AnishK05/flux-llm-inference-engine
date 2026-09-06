@@ -40,6 +40,11 @@ class Sequence:
     token_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     finished_event: asyncio.Event = field(default_factory=asyncio.Event)
     block_ids: list[int] = field(default_factory=list)
+    owned_block_ids: list[int] = field(default_factory=list)
+    prefix_key: tuple[int, ...] | None = None
+    prefix_tokens: int = 0
+    prefix_kv: Any = None
+    prefix_logits: Any = None
     abort_requested: bool = False
     _loop: Any = field(default=None, repr=False)
 

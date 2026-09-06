@@ -113,6 +113,20 @@
           "refId": "B"
         }
       ]
+    },
+    {
+      "id": 9,
+      "title": "Prefix cache",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "flux_prefix_hits", "legendFormat": "hits", "refId": "A" },
+        { "expr": "flux_prefix_misses", "legendFormat": "misses", "refId": "B" },
+        { "expr": "flux_prefix_entries", "legendFormat": "entries", "refId": "C" },
+        { "expr": "flux_prefix_tokens_saved", "legendFormat": "tokens saved", "refId": "D" }
+      ]
     }
   ],
   "refresh": "5s",

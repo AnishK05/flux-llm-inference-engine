@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     max_new_tokens_cap: int = 64
     # naive | cached | queued | continuous. Product default is the Phase 5 loop.
     serve_engine: str = "continuous"
+    enable_prefix_cache: bool = True
+    prefix_cache_max_entries: int = 64
 
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]

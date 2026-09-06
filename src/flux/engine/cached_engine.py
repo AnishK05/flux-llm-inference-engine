@@ -13,7 +13,7 @@ from typing import Any, Sequence
 import torch
 
 from flux.engine.batching import attention_mask_for_decode, extract_row_cache, stack_caches, wrap_past
-from flux.engine.kv_utils import cache_seq_len
+from flux.engine.kv_utils import cache_seq_len, iter_kv
 from flux.engine.naive_engine import pack_result
 from flux.engine.sampler import sample_logits
 from flux.engine.tokenizer import combined_stop_ids, decode_tokens, encode_chat, encode_text
@@ -40,6 +40,38 @@ class CachedEngine:
                 prompt_ids,
                 use_cache=True,
                 cache_position=cache_position,
+            )
+        logits = outputs.logits[:, -1, :]
+        return logits, outputs.past_key_values
+
+    def prefill_from_prefix(
+        self, suffix_ids: torch.Tensor | Sequence[int], prefix_kv: Any
+    ) -> tuple[torch.Tensor, Any]:
+        """Prefill only `suffix_ids` with a cloned prefix cache as past KV."""
+        if not isinstance(suffix_ids, torch.Tensor):
+            suffix_ids = torch.tensor(list(suffix_ids), dtype=torch.long)
+        if suffix_ids.dim() == 1:
+            suffix_ids = suffix_ids.unsqueeze(0)
+        suffix_ids = suffix_ids.to(self.device)
+        if suffix_ids.numel() == 0:
+            raise ValueError("prefill_from_prefix requires a non-empty suffix")
+        past_len = cache_seq_len(prefix_kv)
+        past = wrap_past(iter_kv(prefix_kv), huggingface=self._huggingface)
+        cache_position = torch.arange(past_len, past_len + suffix_ids.shape[1], device=self.device)
+        attn = torch.ones(
+            (suffix_ids.shape[0], past_len + suffix_ids.shape[1]),
+            dtype=torch.long,
+            device=self.device,
+        )
+        position_ids = cache_position.unsqueeze(0).expand(suffix_ids.shape[0], -1)
+        with torch.inference_mode():
+            outputs = self.model(
+                suffix_ids,
+                use_cache=True,
+                past_key_values=past,
+                cache_position=cache_position,
+                attention_mask=attn,
+                position_ids=position_ids,
             )
         logits = outputs.logits[:, -1, :]
         return logits, outputs.past_key_values

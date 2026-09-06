@@ -8,6 +8,7 @@ from typing import Any
 from flux.config import Settings
 from flux.engine.block_pool import BlockPool, resolve_num_kv_blocks
 from flux.engine.cached_engine import CachedEngine
+from flux.engine.prefix_cache import PrefixCache
 from flux.engine.scheduler import RequestQueue, Scheduler
 from flux.engine.worker import ContinuousWorker, QueuedWorker
 
@@ -30,6 +31,7 @@ def attach_worker(app: Any, settings: Settings, engine: Any) -> QueuedWorker | C
     app.state.scheduler = None
     app.state.worker = None
     app.state.block_pool = None
+    app.state.prefix_cache = None
     if mode not in WORKER_ENGINES:
         return None
     if engine is None:
@@ -40,11 +42,19 @@ def attach_worker(app: Any, settings: Settings, engine: Any) -> QueuedWorker | C
     num_blocks = resolve_num_kv_blocks(settings, model=getattr(engine, "model", None))
     pool = BlockPool(num_blocks, settings.block_size)
     queue = RequestQueue(settings.max_waiting)
+    prefix_cache = None
+    if settings.enable_prefix_cache:
+        prefix_cache = PrefixCache(
+            pool,
+            max_entries=settings.prefix_cache_max_entries,
+            block_size=settings.block_size,
+        )
     scheduler = Scheduler(
         queue,
         max_batch=settings.max_batch_size,
         pool=pool,
         policy=settings.scheduler,
+        prefix_cache=prefix_cache,
     )
     worker: QueuedWorker | ContinuousWorker
     if mode == "queued":
@@ -54,13 +64,16 @@ def attach_worker(app: Any, settings: Settings, engine: Any) -> QueuedWorker | C
     app.state.scheduler = scheduler
     app.state.worker = worker
     app.state.block_pool = pool
+    app.state.prefix_cache = prefix_cache
     logger.info(
-        "worker attached mode=%s policy=%s max_waiting=%d max_batch=%d kv_blocks=%d block_size=%d",
+        "worker attached mode=%s policy=%s max_waiting=%d max_batch=%d kv_blocks=%d "
+        "block_size=%d prefix_cache=%s",
         mode,
         scheduler.policy,
         settings.max_waiting,
         settings.max_batch_size,
         pool.num_blocks,
         pool.block_size,
+        "on" if prefix_cache is not None else "off",
     )
     return worker

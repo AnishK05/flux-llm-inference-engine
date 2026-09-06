@@ -7,6 +7,7 @@ import logging
 from collections import deque
 
 from flux.engine.block_pool import BlockPool
+from flux.engine.prefix_cache import PrefixCache, PrefixHit
 from flux.engine.sequence import Sequence, SequenceStatus
 
 logger = logging.getLogger(__name__)
@@ -94,19 +95,36 @@ class Scheduler:
         max_batch: int,
         pool: BlockPool | None = None,
         policy: str = "fcfs",
+        prefix_cache: PrefixCache | None = None,
     ) -> None:
         self.queue = queue
         self.max_batch = max_batch
         self.pool = pool
+        self.prefix_cache = prefix_cache
         name = (policy or "fcfs").strip().lower()
         if name not in {"fcfs", "memory_fit"}:
             logger.warning("unknown scheduler policy %r, using fcfs", policy)
             name = "fcfs"
         self.policy = name
 
+    def _need_tokens(self, seq: Sequence) -> int:
+        need = seq.reservation_tokens()
+        if self.prefix_cache is None:
+            return need
+        hit = self.prefix_cache.peek(seq.prompt_token_ids)
+        if hit is None:
+            return need
+        return max(0, need - hit.n_tokens)
+
+    def _apply_hit(self, seq: Sequence, hit: PrefixHit) -> None:
+        seq.prefix_key = hit.token_ids
+        seq.prefix_tokens = hit.n_tokens
+        seq.prefix_kv = hit.kv_cache
+        seq.prefix_logits = hit.last_logits
+
     def submit(self, seq: Sequence) -> None:
         if self.pool is not None:
-            needed = self.pool.blocks_needed(seq.reservation_tokens())
+            needed = self.pool.blocks_needed(self._need_tokens(seq))
             if needed > self.pool.num_blocks:
                 raise RequestTooLarge(
                     f"request needs {needed} KV blocks but pool has {self.pool.num_blocks}"
@@ -123,14 +141,31 @@ class Scheduler:
         return self._admit_fcfs(room)
 
     def _try_allocate(self, seq: Sequence) -> bool:
+        hit = None
+        if self.prefix_cache is not None:
+            hit = self.prefix_cache.lookup(seq.prompt_token_ids)
+        need = seq.reservation_tokens()
+        if hit is not None:
+            need = max(0, need - hit.n_tokens)
         if self.pool is None:
+            if hit is not None:
+                self._apply_hit(seq, hit)
             return True
-        return self.pool.allocate(seq, seq.reservation_tokens()) is not None
+        ids = self.pool.allocate(seq, need)
+        if ids is None:
+            if hit is not None and self.prefix_cache is not None:
+                self.prefix_cache.release(hit.token_ids)
+            return False
+        seq.owned_block_ids = list(ids)
+        if hit is not None:
+            self._apply_hit(seq, hit)
+            seq.block_ids = list(hit.block_ids) + list(ids)
+        return True
 
     def _fits(self, seq: Sequence) -> bool:
         if self.pool is None:
             return True
-        return self.pool.can_allocate(seq.reservation_tokens())
+        return self.pool.can_allocate(self._need_tokens(seq))
 
     def _admit_fcfs(self, room: int) -> list[Sequence]:
         admitted: list[Sequence] = []

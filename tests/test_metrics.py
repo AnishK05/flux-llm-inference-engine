@@ -15,6 +15,8 @@ def test_metrics_exposes_flux_series(client_continuous: TestClient) -> None:
     assert "flux_kv_blocks_used" in body
     assert "flux_rss_bytes" in body
     assert "flux_decode_batch_size" in body
+    assert "flux_prefix_hits" in body
+    assert "flux_prefix_entries" in body
 
 
 def test_metrics_move_after_generate(client_continuous: TestClient) -> None:

@@ -218,3 +218,17 @@ def test_qwen_block_pool_freed(qwen_pair) -> None:
 
     asyncio.run(main())
     assert pool.used_blocks == 0
+
+
+def test_qwen_prefill_from_prefix_matches_full(qwen_pair) -> None:
+    from flux.engine.kv_utils import slice_cache
+
+    _, cached, _, tokenizer = qwen_pair
+    ids = encode_text(tokenizer, "Prefix reuse check for Qwen.", device="cpu")
+    assert ids.shape[1] >= 8
+    full_logits, full_cache = cached.prefill(ids)
+    split = ids.shape[1] // 2
+    prefix = slice_cache(full_cache, split)
+    suffix_logits, suffix_cache = cached.prefill_from_prefix(ids[0, split:].tolist(), prefix)
+    assert int(suffix_logits.argmax()) == int(full_logits.argmax())
+    assert cache_seq_len(suffix_cache) == ids.shape[1]
