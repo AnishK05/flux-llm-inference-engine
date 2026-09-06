@@ -4,6 +4,7 @@ import httpx
 
 from benchmarks.loadgen import run_load
 from benchmarks.report import bar_chart_svg, write_report
+from benchmarks.run_phase8 import _story
 from benchmarks.scenarios import prompt_of_tokens
 from flux.config import Settings
 from flux.engine.cached_engine import CachedEngine
@@ -85,3 +86,24 @@ def test_report_writes_markdown_and_svg(tmp_path) -> None:
     assert (tmp_path / "bench_tok_s.svg").exists()
     svg = bar_chart_svg("demo", [("a", 1.0), ("b", 2.0)], "x")
     assert "svg" in svg
+
+
+def test_story_does_not_invent_a_ttft_cut() -> None:
+    rows = [
+        {
+            "scenario": "naive_vs_flux",
+            "engine": "naive",
+            "aggregates": {"tok_s": 2.06, "ttft_p99_ms": 149.9, "e2e_p99_ms": 24157.6},
+        },
+        {
+            "scenario": "naive_vs_flux",
+            "engine": "continuous",
+            "aggregates": {"tok_s": 15.06, "ttft_p99_ms": 150.2, "e2e_p99_ms": 3531.7},
+        },
+    ]
+    story = _story(rows)
+    assert "7.3x" in story["text"]
+    assert "unchanged" in story["text"]
+    assert "24.2 s" in story["text"]
+    assert "3.5 s" in story["text"]
+    assert "45%" not in story["text"]

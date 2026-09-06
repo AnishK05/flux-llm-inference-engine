@@ -88,8 +88,8 @@ def hardware_facts(settings: Settings | None = None) -> dict[str, Any]:
         "dtype": settings.dtype,
         "model": settings.model,
         "note": (
-            "Official resume numbers should be re-run on the Windows + WSL2 laptop. "
-            "This host is the machine that executed the bench."
+            "Published figures come from the host that ran this command. "
+            "soak_200 is a FakeLM control-plane check, not a Qwen latency figure."
         ),
     }
 

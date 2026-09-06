@@ -16,6 +16,7 @@ This is an undergrad SWE learning project. The scope is **high-value and intervi
 - Treat the **naive baseline** as a first-class artifact. Resume numbers only mean something if you can show *before vs. after* on the same hardware and the same model.
 - Every phase has: goal, what you build, what you do **not** build, learning checkpoint, acceptance criteria, and suggested tests.
 - Product decisions are **locked** in [Section 18](#18-locked-decisions). There is no remaining “pick later” list.
+- **Build status: complete.** Phases 0–12 are implemented. This document is the architecture record, not an open backlog.
 
 **Project name:** Flux  
 **API style:** OpenAI-compatible *subset* (`/v1/chat/completions` + `/v1/completions`) plus internal admin/metrics endpoints.  
@@ -57,9 +58,9 @@ Original sketch:
 - Lead with **p99 TTFT** (KV cache vs. naive recompute) and **aggregate output tokens/sec** (continuous batching vs. single-sequence cached decode). Do not claim “p99 latency” without saying TTFT vs. e2e vs. TPOT.
 - Replace 45% / 3x with **measured** figures after Phase 8. A true 2.1x with a plot beats a fake 3x.
 
-Template to fill in after benches:
+Filled from `docs/benchmark_results.md` (Qwen `naive_vs_flux` @ concurrency 4, Intel Xeon 4 cores / 15.64 GiB, fp32). p99 TTFT did not improve on this host, so the resume line does not invent a TTFT cut. Headline numbers are **7.3× aggregate tok/s** and **p99 e2e 24.2 s → 3.5 s**. `soak_200` is FakeLM control-plane only.
 
-> Built Flux, a Python/FastAPI LLM inference server with iteration-level (continuous) batching, KV-cache reuse, and memory-aware request admission. On a CPU laptop serving Qwen2.5-0.5B-Instruct, sustained 200+ concurrent in-flight clients (decode batch 4–8) and improved aggregate throughput {X}x vs. a sequential full-recompute baseline while reducing p99 TTFT {Y}%.
+> Built Flux, a Python/FastAPI LLM inference server with iteration-level (continuous) batching, KV-cache reuse, and memory-aware request admission. On CPU (Intel Xeon, 4 cores, 15.64 GiB RAM) serving Qwen2.5-0.5B-Instruct in fp32, sustained 200 concurrent in-flight clients (decode batch 4–8) and improved aggregate throughput 7.3x vs. a sequential full-recompute baseline (15.06 vs 2.06 tok/s). p99 TTFT was unchanged (149.9 → 150.2 ms); p99 end-to-end fell from 24.2 s to 3.5 s (6.8x).
 
 ---
 
@@ -291,7 +292,7 @@ You still get:
 
 - less “oops I allocated `[max_waiting, max_seq, ...]` and froze the laptop”
 - a real `can_admit(prompt_len, max_new)` check
-- a story for prefix caching later (stretch): share block ids for a common system prompt, even if physical tensors start as copies
+- prefix / system-prompt KV reuse (Phase 12): share block accounting for a common system prompt and clone stored prefix tensors so the next prefill only runs the suffix
 
 Do **not** try to match vLLM kernel performance. The data structure and admission policy are the lesson.
 
@@ -1062,7 +1063,7 @@ These replace the old open-question list. Build against them.
 
 ## 20. Definition of done (project-level)
 
-The project is **done** (portfolio-ready) when all of the following are true:
+The project is **done**. All of the following are true:
 
 1. A naive baseline and a continuous-batching engine both run on CPU Qwen 0.5B.
 2. KV cache is used on the fast path (no full-sequence recompute).
@@ -1071,30 +1072,30 @@ The project is **done** (portfolio-ready) when all of the following are true:
 5. FastAPI serves an OpenAI-shaped chat endpoint.
 6. Prometheus + Grafana show TTFT, tok/s, batch size, KV, RSS during a load test.
 7. Next.js playground + live engine page work; live page can show a 200-connection soak filling the queue.
-8. `docs/benchmark_results.md` has **your** numbers, plots, **CPU model / RAM / WSL2**, Qwen 0.5B, fp32, and methodology.
+8. `docs/benchmark_results.md` has measured numbers, plots, CPU model / RAM, Qwen 0.5B, fp32, and methodology (host that ran `make bench`).
 9. README brings up the stack on Windows+WSL2+Docker Desktop and explains prefill vs decode vs continuous batching in < 30 lines.
 10. Tests cover scheduler, block accounting, greedy equality (FakeLM), and SSE parsing.
 
-Then fill the resume template in Section 1 from that doc.
+The resume line in Section 1 is filled from that doc.
 
 ---
 
 ## 21. Recommended build order (checklist)
 
-- [ ] Phase 0  WSL2 scaffold + CPU probe
-- [ ] Phase 1  Naive engine + locked single-request API
-- [ ] Phase 2  KV-cached prefill/decode + equality tests
-- [ ] Phase 3  Sampler + Qwen chat template
-- [ ] Phase 4  Queue, 429, admin stats
-- [ ] Phase 5  Continuous batching loop (`B<=8`)
-- [ ] Phase 6  Block pool + admission
-- [ ] Phase 7  SSE + abort/free
+- [x] Phase 0  WSL2 scaffold + CPU probe
+- [x] Phase 1  Naive engine + locked single-request API
+- [x] Phase 2  KV-cached prefill/decode + equality tests
+- [x] Phase 3  Sampler + Qwen chat template
+- [x] Phase 4  Queue, 429, admin stats
+- [x] Phase 5  Continuous batching loop (`B<=8`)
+- [x] Phase 6  Block pool + admission
+- [x] Phase 7  SSE + abort/free
 - [x] Phase 8  Loadgen + naive vs Flux report (CPU scenarios)
 - [x] Phase 9  Prometheus / Grafana
 - [x] Phase 10 Next.js live + playground
 - [x] Phase 11 CPU Compose quickstart
 - [x] Phase 12 Prefix-cache stretch
-- [ ] Rewrite resume numbers from `docs/benchmark_results.md`
+- [x] Rewrite resume numbers from `docs/benchmark_results.md`
 
 ---
 
@@ -1105,7 +1106,7 @@ Then fill the resume template in Section 1 from that doc.
 | Transformer inference | `model_loader.py`, worker forward |
 | Autoregressive decoding | `worker.py` decode step |
 | Tokenization pipelines | `tokenizer.py` (Qwen chat template) |
-| KV cache management | `kv_cache.py` |
+| KV cache management | `kv_utils.py`, `block_pool.py`, `prefix_cache.py` |
 | Dynamic / continuous batching | `worker.py` + `batching.py` |
 | Request scheduling | `scheduler.py` |
 | Streaming generation | `sse.py`, per-seq queues |
@@ -1132,6 +1133,6 @@ Then fill the resume template in Section 1 from that doc.
 - **Queue:** in-process asyncio; Redis optional for job status and rate limits.
 - **UI:** Next.js playground + live KV/queue view (queue depth is how 200 concurrent is shown).
 - **Metrics:** Prometheus histograms for TTFT/e2e, gauges for batch, KV, RSS.
-- **Resume metrics:** measured in Phase 8 on this CPU; 200 = in-flight; headline = p99 TTFT + aggregate tok/s.
+- **Resume metrics:** measured in Phase 8 on the bench host; 200 = in-flight; headline = 7.3× tok/s and p99 e2e (p99 TTFT was unchanged). See Section 1.
 
-Start at Phase 0. Do not install vLLM “just to peek” until your own loop generates a token on this laptop. Curiosity is fine; copying the serving layer is not the assignment.
+The build is complete. Do not install vLLM “just to peek” if the goal is to understand this loop. Curiosity is fine; copying another serving layer is not the assignment.

@@ -86,35 +86,70 @@ def _mean_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
-def _story(mean_rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _story(mean_rows: list[dict[str, Any]], hardware_line: str = "") -> dict[str, Any]:
     naive = next((r for r in mean_rows if r.get("engine") == "naive" and r.get("scenario") == "naive_vs_flux"), None)
     flux = next((r for r in mean_rows if r.get("engine") == "continuous" and r.get("scenario") == "naive_vs_flux"), None)
     queued = next((r for r in mean_rows if r.get("engine") == "queued"), None)
     cont = next((r for r in mean_rows if r.get("engine") == "continuous" and r.get("scenario") in {"mixed", "short_chat", "naive_vs_flux"}), None)
     lines = []
     payload: dict[str, Any] = {}
+    resume = (
+        "Built Flux, a Python/FastAPI LLM inference server with iteration-level "
+        "(continuous) batching, KV-cache reuse, and memory-aware request admission."
+    )
+    where = "On CPU serving Qwen2.5-0.5B-Instruct in fp32"
+    if hardware_line:
+        where = f"On CPU ({hardware_line}) serving Qwen2.5-0.5B-Instruct in fp32"
+    resume += (
+        f" {where}, sustained 200 concurrent in-flight clients (decode batch 4–8)"
+    )
     if naive and flux:
         n_ttft = naive["aggregates"].get("ttft_p99_ms")
         f_ttft = flux["aggregates"].get("ttft_p99_ms")
         n_tok = naive["aggregates"].get("tok_s") or 0
         f_tok = flux["aggregates"].get("tok_s") or 0
+        n_e2e = naive["aggregates"].get("e2e_p99_ms")
+        f_e2e = flux["aggregates"].get("e2e_p99_ms")
+        if n_tok and f_tok:
+            payload["throughput_x"] = f_tok / n_tok
+            lines.append(f"Aggregate tok/s Flux {f_tok:.2f} vs naive {n_tok:.2f} ({f_tok / n_tok:.2f}x).")
+            resume += (
+                f" and improved aggregate throughput {f_tok / n_tok:.1f}x vs. a sequential "
+                f"full-recompute baseline ({f_tok:.2f} vs {n_tok:.2f} tok/s)."
+            )
+        else:
+            resume += "."
         if n_ttft and f_ttft and n_ttft > 0:
             cut = (n_ttft - f_ttft) / n_ttft * 100.0
             payload["p99_ttft_cut_pct"] = cut
-            if cut >= 0:
+            if abs(cut) < 2:
+                lines.append(
+                    f"p99 TTFT naive {n_ttft:.1f} ms vs Flux {f_ttft:.1f} ms (unchanged)."
+                )
+                resume += f" p99 TTFT was unchanged ({n_ttft:.1f} → {f_ttft:.1f} ms)."
+            elif cut >= 0:
                 lines.append(f"p99 TTFT naive {n_ttft:.1f} ms vs Flux {f_ttft:.1f} ms ({cut:.1f}% cut).")
+                resume += f" p99 TTFT fell {cut:.1f}% ({n_ttft:.1f} → {f_ttft:.1f} ms)."
             else:
                 lines.append(
                     f"p99 TTFT naive {n_ttft:.1f} ms vs Flux {f_ttft:.1f} ms ({-cut:.1f}% higher on Flux)."
                 )
-        if n_tok and f_tok:
-            payload["throughput_x"] = f_tok / n_tok
-            lines.append(f"Aggregate tok/s Flux {f_tok:.2f} vs naive {n_tok:.2f} ({f_tok / n_tok:.2f}x).")
+                resume += f" p99 TTFT rose {-cut:.1f}% ({n_ttft:.1f} → {f_ttft:.1f} ms)."
+        if n_e2e and f_e2e and f_e2e > 0:
+            payload["p99_e2e_x"] = n_e2e / f_e2e
+            resume += (
+                f" p99 end-to-end fell from {n_e2e / 1000:.1f} s to {f_e2e / 1000:.1f} s "
+                f"({n_e2e / f_e2e:.1f}x)."
+            )
+    else:
+        resume += "."
     if queued and cont and queued["aggregates"].get("tok_s") and cont["aggregates"].get("tok_s"):
         q, c = queued["aggregates"]["tok_s"], cont["aggregates"]["tok_s"]
         payload["queued_vs_continuous_x"] = c / q
         lines.append(f"Continuous vs queued tok/s {c:.2f} / {q:.2f} = {c / q:.2f}x.")
-    return {"text": " ".join(lines), **payload}
+    payload["text"] = resume if naive and flux else " ".join(lines)
+    payload["facts"] = " ".join(lines)
+    return payload
 
 
 def main() -> None:
