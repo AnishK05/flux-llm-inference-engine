@@ -60,7 +60,7 @@ export function BenchTable() {
       {payload?.story?.text ? (
         <p className="rounded border border-zinc-800 bg-zinc-950 p-3 text-sm text-zinc-200">{payload.story.text}</p>
       ) : null}
-      <p className="text-xs text-zinc-500">Do not quote soak_200 e2e p99 as a latency win. Re-run on the WSL2 laptop for resume numbers.</p>
+      <p className="text-xs text-zinc-500">soak_200 is FakeLM control-plane only. Do not quote its e2e p99 as a Qwen latency win.</p>
     </div>
   );
 }

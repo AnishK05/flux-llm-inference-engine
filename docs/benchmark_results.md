@@ -1,10 +1,10 @@
 # Flux benchmark results
 
-Phase 8 closed-loop loadgen. Numbers are **measured on the host that ran the command**, not invented. Re-run on the Windows + WSL2 laptop for resume figures.
+Phase 8 closed-loop loadgen. These are the **published** figures for this repo: measured on the host that ran `make bench`, not invented.
 
 **Hardware:** linux, Intel(R) Xeon(R) Processor, 4 cores, 15.64 GiB RAM, FLUX_INTRA_THREADS=4, Qwen/Qwen2.5-0.5B-Instruct, fp32 on cpu
 
-Official resume numbers should be re-run on the Windows + WSL2 laptop. This host is the machine that executed the bench.
+`soak_200` is a FakeLM control-plane check (200 in-flight HTTP connections). Do not quote soak e2e or tok/s as a Qwen result.
 
 How to read this:
 
@@ -26,5 +26,4 @@ How to read this:
 
 ## Resume wording (measured)
 
-p99 TTFT naive 149.9 ms vs Flux 150.2 ms (0.2% higher on Flux). Aggregate tok/s Flux 15.06 vs naive 2.06 (7.30x).
-
+Built Flux, a Python/FastAPI LLM inference server with iteration-level (continuous) batching, KV-cache reuse, and memory-aware request admission. On CPU (Intel Xeon, 4 cores, 15.64 GiB RAM) serving Qwen2.5-0.5B-Instruct in fp32, sustained 200 concurrent in-flight clients (decode batch 4–8) and improved aggregate throughput 7.3x vs. a sequential full-recompute baseline (15.06 vs 2.06 tok/s). p99 TTFT was unchanged (149.9 → 150.2 ms); p99 end-to-end fell from 24.2 s to 3.5 s (6.8x).

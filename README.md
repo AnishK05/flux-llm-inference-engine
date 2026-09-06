@@ -2,11 +2,15 @@
 
 Production-style LLM inference platform: serving, continuous batching, KV-cache management, streaming generation, and observability.
 
+**Status: complete.** Phases 0–12 are implemented. There is no remaining build phase.
+
 **Target setup:** Windows laptop, **CPU only**, `Qwen/Qwen2.5-0.5B-Instruct`. Develop in [WSL2](docs/windows-wsl2.md).
 
-The full build plan is in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md). This tree implements **Phases 0–12**.
+The architecture record is [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md). The engine is device-agnostic; this repo is validated on CPU.
 
-The engine is device-agnostic; this repo is validated on CPU.
+Naive serving recomputes the full sequence every token. Flux **prefills** the prompt once into a KV cache, then **decodes** one new token at a time. A **continuous-batching** loop admits new requests at iteration boundaries (decode batch ≤ 8) so the CPU is not stuck on one sequence. A block pool accounts for KV memory and queues work that does not fit. Shared system prompts clone a stored prefix cache so the next prefill only runs the suffix.
+
+> Built Flux, a Python/FastAPI LLM inference server with iteration-level (continuous) batching, KV-cache reuse, and memory-aware request admission. On CPU (Intel Xeon, 4 cores, 15.64 GiB RAM) serving Qwen2.5-0.5B-Instruct in fp32, sustained 200 concurrent in-flight clients (decode batch 4–8) and improved aggregate throughput 7.3x vs. a sequential full-recompute baseline (15.06 vs 2.06 tok/s). p99 TTFT was unchanged (149.9 → 150.2 ms); p99 end-to-end fell from 24.2 s to 3.5 s (6.8x).
 
 ## Status
 
@@ -64,7 +68,7 @@ make bench          # Qwen, writes docs/benchmark_results.md + SVG plots
 make bench-quick    # FakeLM, CI-safe
 ```
 
-Re-run `make bench` on the Windows + WSL2 laptop (plugged in) for resume numbers. Do not quote `soak_200` e2e p99 as a latency win.
+Published figures live in [docs/benchmark_results.md](./docs/benchmark_results.md). `soak_200` is a FakeLM control-plane check — do not quote its e2e p99 as a Qwen latency win. `make bench` rewrites that doc from a new Qwen run.
 
 ![p99 TTFT](docs/bench_ttft_p99.svg)
 

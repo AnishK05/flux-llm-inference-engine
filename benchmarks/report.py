@@ -59,8 +59,8 @@ def write_report(payload: dict[str, Any], out_dir: Path) -> Path:
     md: list[str] = [
         "# Flux benchmark results",
         "",
-        "Phase 8 closed-loop loadgen. Numbers are **measured on the host that ran the command**, "
-        "not invented. Re-run on the Windows + WSL2 laptop for resume figures.",
+        "Phase 8 closed-loop loadgen. These are the **published** figures for this repo: "
+        "measured on the host that ran `make bench`, not invented.",
         "",
         f"**Hardware:** {hardware}",
         "",
@@ -74,7 +74,7 @@ def write_report(payload: dict[str, Any], out_dir: Path) -> Path:
             "",
             "1. **TTFT / TPOT** — naive (Phase 1) vs Flux continuous (Phase 5) on `long_prompt` or `naive_vs_flux`.",
             "2. **Throughput** — queued vs continuous, or naive vs Flux, at concurrency 4–8.",
-            "3. **`soak_200`** — control plane only. Do not quote soak e2e p99 as the latency win.",
+            "3. **`soak_200`** — FakeLM control plane only. Do not quote soak e2e p99 as a Qwen latency win.",
             "",
             "| Scenario | Engine | Conc | tok/s | req/s | p50 TTFT ms | p99 TTFT ms | p50 e2e ms | p99 e2e ms | statuses |",
             "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",

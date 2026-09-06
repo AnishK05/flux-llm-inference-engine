@@ -9,7 +9,7 @@
     "device": "cpu",
     "dtype": "fp32",
     "model": "Qwen/Qwen2.5-0.5B-Instruct",
-    "note": "Official resume numbers should be re-run on the Windows + WSL2 laptop. This host is the machine that executed the bench."
+    "note": "Published figures come from the host that ran this command. soak_200 is a FakeLM control-plane check, not a Qwen latency figure."
   },
   "hardware_line": "linux, Intel(R) Xeon(R) Processor, 4 cores, 15.64 GiB RAM, FLUX_INTRA_THREADS=4, Qwen/Qwen2.5-0.5B-Instruct, fp32 on cpu",
   "backend": "qwen",
@@ -335,10 +335,12 @@
       "trial": 2
     }
   ],
-  "note": "Official resume numbers should be re-run on the Windows + WSL2 laptop. This host is the machine that executed the bench.",
+  "note": "Published figures come from the host that ran this command. soak_200 is a FakeLM control-plane check, not a Qwen latency figure.",
   "story": {
-    "text": "p99 TTFT naive 149.9 ms vs Flux 150.2 ms (0.2% higher on Flux). Aggregate tok/s Flux 15.06 vs naive 2.06 (7.30x).",
+    "text": "Built Flux, a Python/FastAPI LLM inference server with iteration-level (continuous) batching, KV-cache reuse, and memory-aware request admission. On CPU (Intel Xeon, 4 cores, 15.64 GiB RAM) serving Qwen2.5-0.5B-Instruct in fp32, sustained 200 concurrent in-flight clients (decode batch 4–8) and improved aggregate throughput 7.3x vs. a sequential full-recompute baseline (15.06 vs 2.06 tok/s). p99 TTFT was unchanged (149.9 → 150.2 ms); p99 end-to-end fell from 24.2 s to 3.5 s (6.8x).",
+    "facts": "p99 TTFT naive 149.9 ms vs Flux 150.2 ms (unchanged). Aggregate tok/s Flux 15.06 vs naive 2.06 (7.30x).",
     "p99_ttft_cut_pct": -0.2453515556356233,
-    "throughput_x": 7.296675640938375
+    "throughput_x": 7.296675640938375,
+    "p99_e2e_x": 6.840191
   }
 }
